@@ -299,8 +299,20 @@ void display_deinit(void) {
 void display_clear(uint16_t color) {
     // Big-endian swap: ST7365P wants bytes big-endian over SPI
     uint16_t be = (color >> 8) | (color << 8);
-    for (int i = 0; i < FB_WIDTH * FB_HEIGHT; i++) {
-        s_framebuffer[i] = be;
+    
+    // Fast path: use memset for black (0x0000) or white (0xFFFF)
+    if (be == 0x0000 || be == 0xFFFF) {
+        memset(s_framebuffer, be & 0xFF, FB_SIZE);
+        return;
+    }
+    
+    // Optimized: fill in 32-pixel chunks for better memory bandwidth
+    uint32_t color32 = ((uint32_t)be << 16) | be;  // Two pixels
+    uint32_t *fb32 = (uint32_t *)s_framebuffer;
+    size_t count32 = (FB_WIDTH * FB_HEIGHT) / 2;   // Number of 32-bit words
+    
+    for (size_t i = 0; i < count32; i++) {
+        fb32[i] = color32;
     }
 }
 
@@ -318,6 +330,19 @@ void display_fill_rect(int x, int y, int w, int h, uint16_t color) {
     if (w <= 0 || h <= 0) return;
 
     uint16_t be = (color >> 8) | (color << 8);
+    
+    // Optimize for full-width fills
+    if (x == 0 && w == FB_WIDTH) {
+        uint32_t color32 = ((uint32_t)be << 16) | be;
+        uint32_t *fb32 = (uint32_t *)&s_framebuffer[y * FB_WIDTH];
+        size_t count32 = (w * h) / 2;
+        for (size_t i = 0; i < count32; i++) {
+            fb32[i] = color32;
+        }
+        return;
+    }
+    
+    // Standard per-row fill
     for (int row = y; row < y + h; row++) {
         uint16_t *p = &s_framebuffer[row * FB_WIDTH + x];
         for (int col = 0; col < w; col++) p[col] = be;
