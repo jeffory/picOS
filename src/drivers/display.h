@@ -68,3 +68,9 @@ void display_set_brightness(uint8_t brightness);
 // Used by the system menu to create a translucent darkened overlay effect.
 // Call before drawing the menu panel, then call display_flush().
 void display_darken(void);
+
+// SPI bus arbitration — the WiFi (CYW43) and LCD share SPI1.
+// The WiFi driver must hold this lock for the duration of any CYW43 SPI
+// operation to prevent bus conflicts with LCD DMA transfers.
+void display_spi_lock(void);
+void display_spi_unlock(void);

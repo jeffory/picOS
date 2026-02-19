@@ -16,22 +16,29 @@
 // --- Input ------------------------------------------------------------------
 
 // Button bitmask values (keyboard + d-pad)
-#define BTN_UP      (1 << 0)
-#define BTN_DOWN    (1 << 1)
-#define BTN_LEFT    (1 << 2)
-#define BTN_RIGHT   (1 << 3)
-#define BTN_ENTER   (1 << 4)    // Enter key
-#define BTN_ESC     (1 << 5)    // Escape key
-#define BTN_MENU    (1 << 6)    // System menu trigger (F10 key)
-#define BTN_F1      (1 << 7)
-#define BTN_F2      (1 << 8)
-#define BTN_F3      (1 << 9)
-#define BTN_F4      (1 << 10)
-#define BTN_F5      (1 << 11)
-#define BTN_F6      (1 << 12)
-#define BTN_F7      (1 << 13)
-#define BTN_F8      (1 << 14)
-#define BTN_F9      (1 << 15)
+#define BTN_UP        (1 << 0)
+#define BTN_DOWN      (1 << 1)
+#define BTN_LEFT      (1 << 2)
+#define BTN_RIGHT     (1 << 3)
+#define BTN_ENTER     (1 << 4)    // Enter key
+#define BTN_ESC       (1 << 5)    // Escape key
+#define BTN_MENU      (1 << 6)    // System menu trigger (F10 key)
+#define BTN_F1        (1 << 7)
+#define BTN_F2        (1 << 8)
+#define BTN_F3        (1 << 9)
+#define BTN_F4        (1 << 10)
+#define BTN_F5        (1 << 11)
+#define BTN_F6        (1 << 12)
+#define BTN_F7        (1 << 13)
+#define BTN_F8        (1 << 14)
+#define BTN_F9        (1 << 15)
+#define BTN_BACKSPACE (1 << 16)   // Backspace key
+#define BTN_TAB       (1 << 17)   // Tab key
+#define BTN_DEL       (1 << 18)   // Delete key (Fn+Backspace typically)
+#define BTN_SHIFT     (1 << 19)   // Shift modifier
+#define BTN_CTRL      (1 << 20)   // Ctrl modifier
+#define BTN_ALT       (1 << 21)   // Alt modifier
+#define BTN_FN        (1 << 22)   // Fn/Symbol modifier
 
 typedef struct {
     // Returns current bitmask of held buttons (BTN_* flags)

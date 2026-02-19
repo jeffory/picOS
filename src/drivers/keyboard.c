@@ -183,22 +183,29 @@ void kbd_poll(void) {
 
         uint32_t btn_flag = 0;
         switch (keycode) {
-            case KEY_UP:    btn_flag = BTN_UP;    break;
-            case KEY_DOWN:  btn_flag = BTN_DOWN;  break;
-            case KEY_LEFT:  btn_flag = BTN_LEFT;  break;
-            case KEY_RIGHT: btn_flag = BTN_RIGHT; break;
-            case KEY_ENTER: btn_flag = BTN_ENTER;  break;
-            case KEY_ESC:   btn_flag = BTN_ESC;    break;
-            case KEY_F1:    btn_flag = BTN_F1;    break;
-            case KEY_F2:    btn_flag = BTN_F2;    break;
-            case KEY_F3:    btn_flag = BTN_F3;    break;
-            case KEY_F4:    btn_flag = BTN_F4;    break;
-            case KEY_F5:    btn_flag = BTN_F5;    break;
-            case KEY_F6:    btn_flag = BTN_F6;    break;
-            case KEY_F7:    btn_flag = BTN_F7;    break;
-            case KEY_F8:    btn_flag = BTN_F8;    break;
-            case KEY_F9:    btn_flag = BTN_F9;    break;
-            case KEY_F10:   btn_flag = BTN_MENU;  break;
+            case KEY_UP:       btn_flag = BTN_UP;        break;
+            case KEY_DOWN:     btn_flag = BTN_DOWN;      break;
+            case KEY_LEFT:     btn_flag = BTN_LEFT;      break;
+            case KEY_RIGHT:    btn_flag = BTN_RIGHT;     break;
+            case KEY_ENTER:    btn_flag = BTN_ENTER;     break;
+            case KEY_ESC:      btn_flag = BTN_ESC;       break;
+            case KEY_F1:       btn_flag = BTN_F1;        break;
+            case KEY_F2:       btn_flag = BTN_F2;        break;
+            case KEY_F3:       btn_flag = BTN_F3;        break;
+            case KEY_F4:       btn_flag = BTN_F4;        break;
+            case KEY_F5:       btn_flag = BTN_F5;        break;
+            case KEY_F6:       btn_flag = BTN_F6;        break;
+            case KEY_F7:       btn_flag = BTN_F7;        break;
+            case KEY_F8:       btn_flag = BTN_F8;        break;
+            case KEY_F9:       btn_flag = BTN_F9;        break;
+            case KEY_F10:      btn_flag = BTN_MENU;      break;
+            case KEY_BKSPC:    btn_flag = BTN_BACKSPACE; break;
+            case KEY_TAB:      btn_flag = BTN_TAB;       break;
+            case KEY_MOD_SHL:  btn_flag = BTN_SHIFT;     break;
+            case KEY_MOD_SHR:  btn_flag = BTN_SHIFT;     break;
+            case KEY_MOD_CTRL: btn_flag = BTN_CTRL;      break;
+            case KEY_MOD_ALT:  btn_flag = BTN_ALT;       break;
+            case KEY_MOD_SYM:  btn_flag = BTN_FN;        break;
             default: break;
         }
 

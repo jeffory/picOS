@@ -20,7 +20,7 @@
 #define LCD_PIN_RST     15      // GP15 / Reset
 #define LCD_WIDTH       320
 #define LCD_HEIGHT      320
-#define LCD_SPI_BAUD    (62 * 1000 * 1000)  // 62.5 MHz target (clk_peri=125MHz ÷2) — ~38 fps max
+#define LCD_SPI_BAUD    (80 * 1000 * 1000)  // 80 MHz target (clk_peri=125MHz ÷2) — ~52 fps max
 
 // --- SD Card: FatFS, SPI0 ---------------------------------------------------
 #define SD_SPI_PORT     spi0

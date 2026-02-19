@@ -2,6 +2,7 @@
 #include "os.h"
 #include "../drivers/display.h"
 #include "../drivers/keyboard.h"
+#include "../drivers/wifi.h"
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -97,8 +98,37 @@ static void draw_panel(const flat_item_t *items, int count, int sel,
                 fg = (bat > 20) ? COLOR_GREEN : COLOR_RED;
                 break;
             case ITEM_WIFI:
-                snprintf(label, sizeof(label), "WiFi: Not Available");
-                fg = COLOR_GRAY;
+                if (!wifi_is_available()) {
+                    snprintf(label, sizeof(label), "WiFi: N/A");
+                    fg = COLOR_GRAY;
+                } else {
+                    switch (wifi_get_status()) {
+                        case WIFI_STATUS_CONNECTED: {
+                            const char *ip = wifi_get_ip();
+                            snprintf(label, sizeof(label), "WiFi: %s",
+                                     ip ? ip : "Connected");
+                            fg = COLOR_GREEN;
+                            break;
+                        }
+                        case WIFI_STATUS_CONNECTING:
+                            snprintf(label, sizeof(label), "WiFi: Connecting...");
+                            fg = COLOR_YELLOW;
+                            break;
+                        case WIFI_STATUS_FAILED:
+                            snprintf(label, sizeof(label), "WiFi: Failed");
+                            fg = COLOR_RED;
+                            break;
+                        default: {
+                            const char *ssid = wifi_get_ssid();
+                            if (ssid)
+                                snprintf(label, sizeof(label), "WiFi: Off (%s)", ssid);
+                            else
+                                snprintf(label, sizeof(label), "WiFi: Off");
+                            fg = COLOR_GRAY;
+                            break;
+                        }
+                    }
+                }
                 break;
             case ITEM_REBOOT:
                 snprintf(label, sizeof(label), "Reboot");

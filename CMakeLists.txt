@@ -98,9 +98,11 @@ add_executable(picocalc_os
     src/os/launcher.c
     src/os/lua_bridge.c
     src/os/system_menu.c
+    src/os/config.c
     src/drivers/display.c
     src/drivers/keyboard.c
     src/drivers/sdcard.c
+    src/drivers/wifi.c
 )
 
 target_include_directories(picocalc_os PRIVATE
@@ -121,6 +123,19 @@ target_link_libraries(picocalc_os
     lua
     fatfs
 )
+
+# ── WiFi support (Pico W / Pimoroni Pico Plus 2W boards) ─────────────────────
+# pico_cyw43_arch_lwip_poll uses cooperative (non-threaded) lwip polling;
+# our Lua instruction hook calls wifi_poll() every ~256 opcodes.
+if(PICO_BOARD STREQUAL "pimoroni_pico_plus2_w_rp2350" OR
+   PICO_BOARD STREQUAL "pico_w" OR
+   PICO_BOARD STREQUAL "pico2_w")
+    target_link_libraries(picocalc_os pico_cyw43_arch_lwip_poll)
+    target_compile_definitions(picocalc_os PRIVATE WIFI_ENABLED=1)
+    message(STATUS "WiFi enabled for board: ${PICO_BOARD}")
+else()
+    message(STATUS "WiFi disabled for board: ${PICO_BOARD}")
+endif()
 
 # Enable USB serial for stdio (printf goes to USB-C serial — handy for debug)
 pico_enable_stdio_usb(picocalc_os 1)

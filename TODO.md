@@ -58,21 +58,22 @@ Hardware: PWM on GP26 (left) and GP27 (right) — defined in `hardware.h`
 
 ---
 
-## WiFi — not implemented
+## WiFi — implemented
 
 Hardware: CYW43 on Pimoroni Pico Plus 2 W — **shares SPI1 with the LCD**.
 Must use `display_spi_lock()` / `display_spi_unlock()` around all CYW43 SPI access.
 
-- [ ] Create `src/drivers/wifi.c` / `wifi.h`
-- [ ] `wifi_init()` — CYW43 init via `cyw43_arch_init()`, register SPI arbitration with display mutex
-- [ ] `wifi_connect(ssid, password)` — non-blocking; use `cyw43_arch_wifi_connect_async()`
-- [ ] `wifi_get_status()` — returns `WIFI_STATUS_*` enum (defined in `os.h`)
-- [ ] `wifi_disconnect()`
-- [ ] `wifi_get_ip()` / `wifi_get_ssid()`
-- [ ] `wifi_is_available()` — detect Pico 2W vs standard Pico 2 at runtime
-- [ ] Expose full `picocalc.wifi.*` table to Lua (see `os.h` for the full interface)
-- [ ] Wire `g_api.wifi` in `main.c`
-- [ ] Add `pico_cyw43_arch` to `CMakeLists.txt` (already listed in SDK but needs enabling)
+- [x] Create `src/drivers/wifi.c` / `wifi.h`
+- [x] `wifi_init()` — CYW43 init via `cyw43_arch_init()`, SPI mutex enabled in `display_flush()`, auto-connects from config
+- [x] `wifi_connect(ssid, password)` — non-blocking; uses `cyw43_arch_wifi_connect_async()` with WPA2_MIXED_PSK
+- [x] `wifi_get_status()` — returns `WIFI_STATUS_*` enum (defined in `os.h`)
+- [x] `wifi_disconnect()` — calls `cyw43_wifi_leave()`
+- [x] `wifi_get_ip()` / `wifi_get_ssid()` — lwip netif for IP
+- [x] `wifi_is_available()` — tracks `cyw43_arch_init()` success at runtime
+- [x] Expose full `picocalc.wifi.*` table to Lua with `STATUS_*` constants
+- [x] Wire `g_api.wifi` in `main.c`
+- [x] `pico_cyw43_arch_lwip_poll` added to `CMakeLists.txt` (conditional on WiFi-capable boards)
+- [x] `wifi_poll()` called from Lua instruction hook every ~256 opcodes (background polling)
 
 ---
 
@@ -88,6 +89,7 @@ The Menu/Sym key (`BTN_MENU`) pauses the running app and shows an OS-level overl
 - [x] Wire `g_api.sys.addMenuItem` and `clearMenuItems` in `main.c`
 - [x] Expose `picocalc.sys.addMenuItem(label, fn)` and `clearMenuItems()` to Lua
 - [x] Menu button also works during `sys.sleep()` (10ms polling loop)
+- [ ] Implement the system menu overlay working on the main menu
 
 ---
 
@@ -112,7 +114,7 @@ Run the **Key Test** app (`/apps/keytest`) and check what raw hex codes appear f
 ## System — miscellaneous
 
 - [ ] **Core 1 background tasks** — `core1_entry()` in `main.c` is an idle spin loop; candidates: audio mixing, WiFi polling, display DMA coordination
-- [ ] **Shared config** — read/write `/system/config.json` for persisted settings (WiFi credentials, brightness, etc.)
+- [x] **Shared config** — `src/os/config.h` / `config.c`; reads/writes `/system/config.json`; flat key/value JSON; exposed as `picocalc.config.{get,set,save,load}()`
 - [ ] **`sys.isUSBPowered()` implementation** — currently a stub; on RP2350 Pico, VBUS is detectable via GP24
 - [ ] **SD card hot-swap** — `sdcard_remount()` exists; launcher rescans on app exit, but in-app remount notification is unhandled
 

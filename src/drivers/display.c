@@ -429,9 +429,7 @@ void display_draw_image(int x, int y, int w, int h, const uint16_t *data) {
 }
 
 void display_flush(void) {
-    // Note: mutex only needed if WiFi (CYW43) shares SPI1
-    // For now, commented out for max performance
-    // mutex_enter_blocking(&s_spi_mutex);
+    mutex_enter_blocking(&s_spi_mutex);
 
     lcd_set_window(0, 0, FB_WIDTH - 1, FB_HEIGHT - 1);
 
@@ -449,7 +447,7 @@ void display_flush(void) {
     while (spi_is_busy(LCD_SPI_PORT)) tight_loop_contents();
 
     lcd_cs_high();
-    // mutex_exit(&s_spi_mutex);
+    mutex_exit(&s_spi_mutex);
 }
 
 void display_set_brightness(uint8_t brightness) {

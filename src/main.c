@@ -9,10 +9,12 @@
 #include "os/os.h"
 #include "os/launcher.h"
 #include "os/system_menu.h"
+#include "os/config.h"
 #include "hardware.h"
 #include "drivers/display.h"
 #include "drivers/keyboard.h"
 #include "drivers/sdcard.h"
+#include "drivers/wifi.h"
 #include "splash_logo.h"
 
 // ── OS API implementation stubs (wiring the function pointer table) ───────────
@@ -72,6 +74,15 @@ static picocalc_sys_t s_sys_impl = {
     .addMenuItem       = system_menu_add_item,
     .clearMenuItems    = system_menu_clear_items,
     .log               = sys_log,
+};
+
+static picocalc_wifi_t s_wifi_impl = {
+    .connect     = wifi_connect,
+    .disconnect  = wifi_disconnect,
+    .getStatus   = wifi_get_status,
+    .getIP       = wifi_get_ip,
+    .getSSID     = wifi_get_ssid,
+    .isAvailable = wifi_is_available,
 };
 
 // ── Boot splash ───────────────────────────────────────────────────────────────
@@ -140,6 +151,7 @@ int main(void) {
     g_api.input   = &s_input_impl;
     g_api.display = &s_display_impl;
     g_api.sys     = &s_sys_impl;
+    g_api.wifi    = &s_wifi_impl;
     // fs and audio wired after their init below
 
     // Initialise display first so we can show progress
@@ -171,6 +183,13 @@ int main(void) {
     }
 
     printf("SD card mounted OK\n");
+
+    // Load persisted settings from /system/config.json
+    config_load();
+
+    // Initialise WiFi hardware (auto-connects if credentials are in config)
+    draw_splash("Initialising WiFi...");
+    wifi_init();
 
     // Launch Core 1 background tasks
     multicore_launch_core1(core1_entry);
