@@ -6,6 +6,7 @@ local disp = pc.display
 local input = pc.input
 local sys = pc.sys
 local fs = pc.fs
+local wifi = pc.wifi
 
 -- Colors
 local BG     = disp.BLACK
@@ -24,13 +25,17 @@ local tests = {
     fs_read = {name = "FS Read", status = "WAIT", value = ""},
     fs_write = {name = "FS Write", status = "WAIT", value = ""},
     fs_list = {name = "FS List", status = "WAIT", value = ""},
+    fs_mkdir = {name = "FS Mkdir", status = "WAIT", value = ""},
+    wifi_avail = {name = "WiFi Avail", status = "WAIT", value = ""},
+    wifi_status = {name = "WiFi Status", status = "WAIT", value = ""},
 }
 
-local test_order = {"battery", "usb", "time", "log", "fs_read", "fs_write", "fs_list"}
+local test_order = {"battery", "usb", "time", "log", "fs_read", "fs_mkdir", "fs_write", "fs_list", "wifi_avail", "wifi_status"}
 
 local mode = "auto"  -- "auto" or "reboot_confirm"
 local start_time = 0
-local test_file = "/data/systest.txt"
+local data_dir = "/data/" .. APP_ID
+local test_file = data_dir .. "/systest.txt"
 local last_char = ""
 local button_state = 0
 
@@ -85,8 +90,20 @@ local function run_fs_read_test()
     end
 end
 
+local function run_fs_mkdir_test()
+    -- Create our data directory
+    local success = fs.mkdir(data_dir)
+    if success then
+        tests.fs_mkdir.status = "PASS"
+        tests.fs_mkdir.value = APP_ID
+    else
+        tests.fs_mkdir.status = "FAIL"
+        tests.fs_mkdir.value = "Failed"
+    end
+end
+
 local function run_fs_write_test()
-    -- Write a test file
+    -- Write a test file to our data directory
     local f = fs.open(test_file, "w")
     if f then
         local written = fs.write(f, "PicoCalc OS Test: " .. sys.getTimeMs())
@@ -115,14 +132,53 @@ local function run_fs_list_test()
     end
 end
 
+local function run_wifi_avail_test()
+    local avail = wifi.isAvailable()
+    if avail then
+        tests.wifi_avail.status = "PASS"
+        tests.wifi_avail.value = "Hardware OK"
+    else
+        tests.wifi_avail.status = "INFO"
+        tests.wifi_avail.value = "Not available"
+    end
+end
+
+local function run_wifi_status_test()
+    if not wifi.isAvailable() then
+        tests.wifi_status.status = "INFO"
+        tests.wifi_status.value = "N/A"
+        return
+    end
+    
+    local status = wifi.getStatus()
+    if status == wifi.STATUS_CONNECTED then
+        local ip = wifi.getIP()
+        local ssid = wifi.getSSID()
+        tests.wifi_status.status = "PASS"
+        tests.wifi_status.value = ssid .. " (" .. ip .. ")"
+    elseif status == wifi.STATUS_CONNECTING then
+        tests.wifi_status.status = "INFO"
+        tests.wifi_status.value = "Connecting..."
+    elseif status == wifi.STATUS_FAILED then
+        tests.wifi_status.status = "WARN"
+        tests.wifi_status.value = "Failed"
+    else
+        tests.wifi_status.status = "INFO"
+        tests.wifi_status.value = "Disconnected"
+    end
+end
+
 local function run_all_tests()
     run_battery_test()
     run_usb_test()
     run_time_test()
     run_log_test()
     run_fs_read_test()
+    run_fs_mkdir_test()
     run_fs_write_test()
     run_fs_list_test()
+    run_wifi_avail_test()
+    run_wifi_status_test()
 end
 
 -- ── Drawing Functions ─────────────────────────────────────────────────────────
@@ -130,30 +186,36 @@ end
 local function draw_status_color(status)
     if status == "PASS" then return GOOD
     elseif status == "FAIL" then return WARN
+    elseif status == "WARN" then return WARN
     elseif status == "INFO" then return disp.CYAN
     else return DIM
     end
 end
 
 local function draw_test_results()
-    local y = 40
-    local line_height = 14
+    local y = 30
+    local line_height = 11
     
     for _, key in ipairs(test_order) do
         local test = tests[key]
         local color = draw_status_color(test.status)
         
-        -- Test name
-        disp.drawText(8, y, test.name, FG, BG)
+        -- Test name (shorter width)
+        disp.drawText(4, y, test.name, FG, BG)
         
         -- Status
-        local status_x = 120
+        local status_x = 90
         disp.drawText(status_x, y, test.status, color, BG)
         
-        -- Value
+        -- Value (truncate if too long)
         if test.value ~= "" then
-            local value_x = 180
-            disp.drawText(value_x, y, test.value, DIM, BG)
+            local value_x = 150
+            local max_len = 28  -- Fit within screen
+            local display_val = test.value
+            if #display_val > max_len then
+                display_val = display_val:sub(1, max_len - 3) .. "..."
+            end
+            disp.drawText(value_x, y, display_val, DIM, BG)
         end
         
         y = y + line_height
@@ -164,39 +226,34 @@ local function draw_auto_mode()
     disp.clear(BG)
     
     -- Header
-    disp.drawText(8, 8, "System Test Suite", TITLE, BG)
-    disp.drawLine(8, 22, 312, 22, DIM)
+    disp.drawText(4, 4, "System Test Suite", TITLE, BG)
+    disp.drawLine(4, 18, 316, 18, DIM)
     
     -- Test results
     draw_test_results()
     
-    -- Runtime info
-    local y = 180
+    -- Runtime info (more compact)
+    local y = 150
     local runtime = sys.getTimeMs() - start_time
-    disp.drawText(8, y, "Runtime: " .. runtime .. " ms", DIM, BG)
-    y = y + 14
+    disp.drawText(4, y, "Runtime: " .. runtime .. " ms", DIM, BG)
+    y = y + 10
     
     -- Current time
-    disp.drawText(8, y, "Current time: " .. sys.getTimeMs() .. " ms", DIM, BG)
-    y = y + 14
+    disp.drawText(4, y, "Time: " .. sys.getTimeMs() .. " ms", DIM, BG)
+    y = y + 10
     
     -- Button state display
-    disp.drawText(8, y, "Buttons: 0x" .. string.format("%X", button_state), DIM, BG)
-    y = y + 14
+    disp.drawText(4, y, "Btns: 0x" .. string.format("%X", button_state), DIM, BG)
     
-    -- Last character typed
+    -- Last character typed (on right side)
     if last_char ~= "" then
-        disp.drawText(8, y, "Last key: '" .. last_char .. "'", DIM, BG)
-        y = y + 14
+        disp.drawText(160, y, "Key: '" .. last_char .. "'", DIM, BG)
     end
-    
-    -- Instructions
     y = y + 10
-    disp.drawText(8, y, "ENTER: Rerun tests", disp.YELLOW, BG)
-    y = y + 14
-    disp.drawText(8, y, "MENU: Reboot menu", WARN, BG)
-    y = y + 14
-    disp.drawText(8, y, "ESC: Exit to launcher", FG, BG)
+    
+    -- Instructions (compact)
+    y = y + 8
+    disp.drawText(4, y, "ENTER:Rerun MENU:Reboot ESC:Exit", disp.YELLOW, BG)
 end
 
 local function draw_reboot_mode()
