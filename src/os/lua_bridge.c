@@ -2,6 +2,7 @@
 #include "../os/os.h"
 #include "../os/system_menu.h"
 #include "../os/config.h"
+#include "../os/clock.h"
 #include "../drivers/display.h"
 #include "../drivers/keyboard.h"
 #include "../drivers/wifi.h"
@@ -256,6 +257,21 @@ static void lua_menu_trampoline(void *user) {
     lua_call(cb->L, 0, 0);  // propagates errors (including sys.exit() sentinel)
 }
 
+// picocalc.sys.getClock() → {synced=bool, hour=int, min=int, sec=int, epoch=int}
+// epoch is UTC Unix seconds; hour/min/sec are UTC + tz_offset.
+static int l_sys_getClock(lua_State *L) {
+    int h = 0, m = 0, s = 0;
+    bool synced = clock_get_time(&h, &m, &s);
+    lua_createtable(L, 0, 5);
+    lua_pushboolean(L, synced);   lua_setfield(L, -2, "synced");
+    lua_pushinteger(L, h);         lua_setfield(L, -2, "hour");
+    lua_pushinteger(L, m);         lua_setfield(L, -2, "min");
+    lua_pushinteger(L, s);         lua_setfield(L, -2, "sec");
+    lua_pushinteger(L, (lua_Integer)clock_get_epoch());
+                                   lua_setfield(L, -2, "epoch");
+    return 1;
+}
+
 static int l_sys_addMenuItem(lua_State *L) {
     const char *label = luaL_checkstring(L, 1);
     luaL_checktype(L, 2, LUA_TFUNCTION);
@@ -290,6 +306,7 @@ static const luaL_Reg l_sys_lib[] = {
     {"exit",           l_sys_exit},
     {"reboot",         l_sys_reboot},
     {"isUSBPowered",   l_sys_isUSBPowered},
+    {"getClock",       l_sys_getClock},
     {"addMenuItem",    l_sys_addMenuItem},
     {"clearMenuItems", l_sys_clearMenuItems},
     {NULL, NULL}

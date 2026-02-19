@@ -2,12 +2,14 @@
 #include "../drivers/display.h"
 #include "../drivers/keyboard.h"
 #include "../drivers/sdcard.h"
+#include "../drivers/wifi.h"
 
 #include "lua.h"
 #include "lualib.h"
 #include "lauxlib.h"
 #include "lua_bridge.h"
 #include "system_menu.h"
+#include "clock.h"
 
 #include "pico/stdlib.h"
 
@@ -115,13 +117,27 @@ static void draw_header(void) {
     display_fill_rect(0, 0, FB_WIDTH, 28, C_HEADER_BG);
     display_draw_text(8, 8, "PicoCalc OS", C_TEXT, C_HEADER_BG);
 
-    // Battery indicator top-right
+    // Right-side status: lay out right-to-left
+    // 1. Battery (rightmost)
+    int x = FB_WIDTH - 8;  // right margin
     int bat = kbd_get_battery_percent();
     if (bat >= 0) {
-        char buf[16];
-        snprintf(buf, sizeof(buf), "Bat:%d%%", bat);
+        char bat_buf[16];
+        snprintf(bat_buf, sizeof(bat_buf), "Bat:%d%%", bat);
+        int bat_w = (int)strlen(bat_buf) * 6;
+        x -= bat_w;
         uint16_t c = (bat > 20) ? C_BATTERY_OK : C_BATTERY_LO;
-        display_draw_text(FB_WIDTH - strlen(buf) * 6 - 8, 8, buf, c, C_HEADER_BG);
+        display_draw_text(x, 8, bat_buf, c, C_HEADER_BG);
+        x -= 12;  // gap between battery and clock
+    }
+
+    // 2. Clock (left of battery)
+    if (clock_is_set()) {
+        char clk_buf[8];
+        clock_format(clk_buf, sizeof(clk_buf));
+        int clk_w = (int)strlen(clk_buf) * 6;
+        x -= clk_w;
+        display_draw_text(x, 8, clk_buf, C_TEXT, C_HEADER_BG);
     }
 
     display_fill_rect(0, 28, FB_WIDTH, 1, C_BORDER);
@@ -247,9 +263,16 @@ void launcher_run(void) {
 
     while (true) {
         kbd_poll();
-        uint32_t pressed = kbd_get_buttons_pressed();
+        wifi_poll();
 
         bool dirty = false;
+
+        if (kbd_consume_menu_press()) {
+            system_menu_show(NULL);
+            dirty = true;
+        }
+
+        uint32_t pressed = kbd_get_buttons_pressed();
 
         if (pressed & BTN_UP) {
             if (s_selected > 0) {

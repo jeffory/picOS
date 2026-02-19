@@ -11,6 +11,7 @@
 #include "pico/cyw43_arch.h"
 #include "lwip/netif.h"
 #include "lwip/ip4_addr.h"
+#include "lwip/apps/sntp.h"
 #endif
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -141,11 +142,14 @@ void wifi_poll(void) {
                                    s_ip, sizeof(s_ip));
                 }
                 printf("WiFi: connected  IP=%s\n", s_ip);
+                sntp_init();
             } else if (s_status == WIFI_STATUS_FAILED) {
                 printf("WiFi: connect failed (link=%d)\n", link);
+                sntp_stop();
             } else if (s_status == WIFI_STATUS_DISCONNECTED) {
                 s_ip[0] = '\0';
                 printf("WiFi: link lost\n");
+                sntp_stop();
             }
         }
     }

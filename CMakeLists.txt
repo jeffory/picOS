@@ -98,8 +98,10 @@ add_executable(picocalc_os
     src/os/launcher.c
     src/os/lua_bridge.c
     src/os/system_menu.c
+    src/os/text_input.c
     src/os/file_browser.c
     src/os/config.c
+    src/os/clock.c
     src/drivers/display.c
     src/drivers/keyboard.c
     src/drivers/sdcard.c
@@ -131,7 +133,7 @@ target_link_libraries(picocalc_os
 if(PICO_BOARD STREQUAL "pimoroni_pico_plus2_w_rp2350" OR
    PICO_BOARD STREQUAL "pico_w" OR
    PICO_BOARD STREQUAL "pico2_w")
-    target_link_libraries(picocalc_os pico_cyw43_arch_lwip_poll)
+    target_link_libraries(picocalc_os pico_cyw43_arch_lwip_poll pico_lwip_sntp)
     target_compile_definitions(picocalc_os PRIVATE WIFI_ENABLED=1)
     message(STATUS "WiFi enabled for board: ${PICO_BOARD}")
 else()

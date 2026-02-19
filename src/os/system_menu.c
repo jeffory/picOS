@@ -1,4 +1,6 @@
 #include "system_menu.h"
+#include "text_input.h"
+#include "config.h"
 #include "os.h"
 #include "../drivers/display.h"
 #include "../drivers/keyboard.h"
@@ -52,6 +54,86 @@ typedef struct {
     item_type_t type;
     int         app_idx;  // valid only when type == ITEM_APP_CB
 } flat_item_t;
+
+// ── WiFi helpers ──────────────────────────────────────────────────────────────
+
+// Show a small 2-item submenu: 1=Reconfigure, 2=Disconnect, 0=Cancel
+static int show_wifi_submenu(void) {
+    static const char *const sub_labels[] = { "Reconfigure", "Disconnect" };
+    static const int sub_count = 2;
+
+    const int sub_w = 180;
+    int panel_h = 32 + sub_count * ITEM_H;
+    int panel_x = (FB_WIDTH  - sub_w) / 2;
+    int panel_y = (FB_HEIGHT - panel_h) / 2;
+
+    int  sel         = 0;
+    bool running     = true;
+    bool need_redraw = true;
+
+    while (running) {
+        if (need_redraw) {
+            display_draw_rect(panel_x, panel_y, sub_w, panel_h, C_BORDER);
+            display_fill_rect(panel_x + 1, panel_y + 1, sub_w - 2, TITLE_H, C_TITLE_BG);
+            const char *title = "WiFi";
+            int tw = display_text_width(title);
+            display_draw_text(panel_x + (sub_w - tw) / 2, panel_y + 5,
+                              title, COLOR_WHITE, C_TITLE_BG);
+            display_fill_rect(panel_x + 1, panel_y + 1 + TITLE_H, sub_w - 2, 1, C_BORDER);
+
+            int items_y = panel_y + 1 + TITLE_H + 1;
+            for (int i = 0; i < sub_count; i++) {
+                int iy = items_y + i * ITEM_H;
+                bool s = (i == sel);
+                uint16_t bg = s ? C_SEL_BG : C_PANEL_BG;
+                display_fill_rect(panel_x + 1, iy, sub_w - 2, ITEM_H, bg);
+                display_draw_text(panel_x + 4,  iy + 2, s ? ">" : " ", COLOR_WHITE, bg);
+                display_draw_text(panel_x + 10, iy + 2, sub_labels[i], COLOR_WHITE, bg);
+            }
+
+            int fdiv_y = items_y + sub_count * ITEM_H;
+            display_fill_rect(panel_x + 1, fdiv_y, sub_w - 2, 1, C_BORDER);
+            int footer_y = fdiv_y + 1;
+            display_fill_rect(panel_x + 1, footer_y, sub_w - 2, FOOTER_H, C_TITLE_BG);
+            display_draw_text(panel_x + 4, footer_y + 2,
+                              "Enter:select  Esc:close", COLOR_GRAY, C_TITLE_BG);
+
+            display_flush();
+            need_redraw = false;
+        }
+
+        kbd_poll();
+        wifi_poll();
+        uint32_t pressed = kbd_get_buttons_pressed();
+
+        if ((pressed & BTN_UP) && sel > 0) { sel--; need_redraw = true; }
+        if ((pressed & BTN_DOWN) && sel < sub_count - 1) { sel++; need_redraw = true; }
+        if (pressed & BTN_ENTER) return sel + 1;
+        if (pressed & BTN_ESC)   return 0;
+
+        sleep_ms(16);
+    }
+    return 0;
+}
+
+static void run_wifi_config(void) {
+    char ssid[CONFIG_VAL_MAX];
+    char pass[CONFIG_VAL_MAX];
+
+    const char *saved_ssid = config_get("wifi_ssid");
+    if (!saved_ssid) saved_ssid = "";
+
+    if (!text_input_show("WiFi Settings", "Network (SSID):", saved_ssid, ssid, sizeof(ssid)))
+        return;
+
+    if (!text_input_show("WiFi Settings", "Password:", "", pass, sizeof(pass)))
+        return;
+
+    config_set("wifi_ssid", ssid);
+    config_set("wifi_pass", pass);
+    config_save();
+    wifi_connect(ssid, pass);
+}
 
 // ── Panel drawing ─────────────────────────────────────────────────────────────
 
@@ -179,7 +261,8 @@ void system_menu_clear_items(void) {
 }
 
 void system_menu_show(lua_State *L) {
-    // Build flat item list: app items first, then built-ins
+    // Build flat item list: app items first, then built-ins.
+    // ITEM_EXIT is omitted when called from the launcher (L == NULL).
     flat_item_t items[SYSMENU_MAX_APP_ITEMS + 5];
     int count = 0;
 
@@ -192,7 +275,8 @@ void system_menu_show(lua_State *L) {
     items[count++] = (flat_item_t){ ITEM_BATTERY,    0 };
     items[count++] = (flat_item_t){ ITEM_WIFI,       0 };
     items[count++] = (flat_item_t){ ITEM_REBOOT,     0 };
-    items[count++] = (flat_item_t){ ITEM_EXIT,       0 };
+    if (L != NULL)
+        items[count++] = (flat_item_t){ ITEM_EXIT,   0 };
 
     // panel_h = border(1) + title(16) + divider(1) + items(count*13)
     //         + divider(1) + footer(12) + border(1) = 32 + count*13
@@ -218,6 +302,7 @@ void system_menu_show(lua_State *L) {
         }
 
         kbd_poll();
+        wifi_poll();
         uint32_t pressed = kbd_get_buttons_pressed();
 
         if (pressed & BTN_UP) {
@@ -254,8 +339,18 @@ void system_menu_show(lua_State *L) {
                     need_redraw = true;
                     break;
                 case ITEM_BATTERY:
+                    break;
                 case ITEM_WIFI:
-                    // Read-only items — do nothing
+                    if (wifi_is_available()) {
+                        if (wifi_get_status() == WIFI_STATUS_CONNECTED) {
+                            int choice = show_wifi_submenu();
+                            if (choice == 1) run_wifi_config();
+                            else if (choice == 2) wifi_disconnect();
+                        } else {
+                            run_wifi_config();
+                        }
+                        need_redraw = true;
+                    }
                     break;
                 case ITEM_REBOOT:
                     watchdog_enable(1, true);
@@ -263,8 +358,11 @@ void system_menu_show(lua_State *L) {
                     break; /* unreachable */
                 case ITEM_EXIT:
                     system_menu_clear_items();
-                    luaL_error(L, "__picocalc_exit__"); /* does longjmp */
-                    break; /* unreachable */
+                    if (L != NULL)
+                        luaL_error(L, "__picocalc_exit__"); /* does longjmp */
+                    else
+                        running = false;
+                    break;
             }
         }
 

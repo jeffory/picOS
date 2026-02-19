@@ -63,3 +63,9 @@
 
 // Turn off all debug output (saves flash)
 #define LWIP_DEBUG                  0
+
+// SNTP — fetch UTC from pool.ntp.org once WiFi connects
+extern void clock_sntp_set(unsigned sec);  // forward decl (clock.h not included here)
+#define SNTP_SERVER_DNS             1
+#define SNTP_SERVER_ADDRESS         "pool.ntp.org"
+#define SNTP_SET_SYSTEM_TIME(sec)   clock_sntp_set((unsigned)(sec))
