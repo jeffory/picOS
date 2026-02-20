@@ -104,6 +104,7 @@ add_executable(picocalc_os
     src/os/config.c
     src/os/clock.c
     src/os/tz_picker.c
+    src/os/ui.c
     src/drivers/display.c
     src/drivers/keyboard.c
     src/drivers/sdcard.c
