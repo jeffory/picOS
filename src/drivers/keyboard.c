@@ -329,10 +329,10 @@ int kbd_get_battery_percent(void) {
   }
 
   if (s_last_ms == 0 || now - s_last_ms >= 5000) {
-    uint8_t val = 0;
-    if (!i2c_read_reg(KBD_REG_BAT, &val, 1, 10))
+    uint8_t val[2] = {0, 0}; // STM32 I2C firmware preps 2 bytes
+    if (!i2c_read_reg(KBD_REG_BAT, val, 2, KBD_REG_DELAY_MS))
       return s_cached_val;
-    s_cached_val = (int)(val & 0x7F);
+    s_cached_val = (int)(val[1] & 0x7F);
     s_last_ms = now;
   }
   return s_cached_val;
