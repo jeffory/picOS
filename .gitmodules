@@ -1,0 +1,3 @@
+[submodule "third_party/umm_malloc"]
+	path = third_party/umm_malloc
+	url = https://github.com/rhempel/umm_malloc.git

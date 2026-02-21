@@ -8,6 +8,7 @@
 #include "lauxlib.h"
 #include "lua.h"
 #include "lua_bridge.h"
+#include "lua_psram_alloc.h"
 #include "lualib.h"
 #include "screenshot.h"
 #include "system_menu.h"
@@ -200,8 +201,8 @@ static bool run_app(int idx) {
     return false;
   }
 
-  // Create a fresh Lua VM for this app
-  lua_State *L = luaL_newstate();
+  // Create a fresh Lua VM for this app using the PSRAM allocator
+  lua_State *L = lua_psram_newstate();
   if (!L) {
     free(lua_src);
     return false;

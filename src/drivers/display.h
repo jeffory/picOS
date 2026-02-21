@@ -57,8 +57,7 @@ int display_text_width(const char *text);
 // Out-of-bounds pixels are clipped silently.
 void display_draw_image(int x, int y, int w, int h, const uint16_t *data);
 
-// Push framebuffer to LCD. Blocks until transfer complete.
-// The WiFi SPI lock is acquired/released around this call.
+// Push framebuffer to LCD (starts DMA transfer in the background).
 void display_flush(void);
 
 // Brightness via backlight PWM (0-255)

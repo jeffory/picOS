@@ -8,6 +8,7 @@ third_party/fatfs/ff.h
 third_party/fatfs/ffsystem.c
 third_party/fatfs/ffunicode.c
 third_party/fatfs/diskio.h
+third_party/umm_malloc/*
 .vscode/
 SDK.md
 review.md

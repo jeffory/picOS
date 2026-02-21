@@ -23,6 +23,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "umm_malloc.h"
+
 static void http_lua_fire_pending(lua_State *L);
 
 // ── Colour helpers
@@ -748,7 +750,7 @@ static char *lua_headers_to_str(lua_State *L, int idx) {
   if (lua_isnoneornil(L, idx))
     return NULL;
 
-  char *buf = malloc(4096);
+  char *buf = umm_malloc(4096);
   if (!buf)
     return NULL;
   int n = 0;
@@ -787,7 +789,7 @@ static char *lua_headers_to_str(lua_State *L, int idx) {
   }
 
   if (n == 0) {
-    free(buf);
+    umm_free(buf);
     return NULL;
   }
   return buf;
@@ -936,7 +938,7 @@ static int do_request(lua_State *L, bool has_body) {
   bool ok = has_body ? http_post(ud->conn, path, hdrs, body, body_len)
                      : http_get(ud->conn, path, hdrs);
 
-  free(hdrs);
+  umm_free(hdrs);
 
   lua_pushboolean(L, ok);
   if (!ok) {
@@ -998,7 +1000,7 @@ static int l_http_read(lua_State *L) {
   if (want > 65536)
     want = 65536;
 
-  uint8_t *tmp = malloc(want);
+  uint8_t *tmp = umm_malloc(want);
   if (!tmp) {
     lua_pushnil(L);
     return 1;
@@ -1009,7 +1011,7 @@ static int l_http_read(lua_State *L) {
     lua_pushlstring(L, (char *)tmp, n);
   else
     lua_pushnil(L);
-  free(tmp);
+  umm_free(tmp);
   return 1;
 }
 
