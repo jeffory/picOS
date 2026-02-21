@@ -1213,7 +1213,12 @@ static int s_perf_fps = 0;
 // Start timing a frame. Call at the beginning of your game loop.
 static int l_perf_beginFrame(lua_State *L) {
   (void)L;
-  s_perf_frame_start = to_ms_since_boot(get_absolute_time());
+  // Initialize start time on the very first frame to avoid a huge initial
+  // delta, but don't overwrite it on subsequent frames. This ensures that the
+  // total frame loop time (including sys.sleep after endFrame) is captured.
+  if (s_perf_frame_start == 0) {
+    s_perf_frame_start = to_ms_since_boot(get_absolute_time());
+  }
   return 0;
 }
 
@@ -1221,21 +1226,32 @@ static int l_perf_beginFrame(lua_State *L) {
 static int l_perf_endFrame(lua_State *L) {
   (void)L;
   uint32_t now = to_ms_since_boot(get_absolute_time());
-  uint32_t delta = now - s_perf_frame_start;
 
-  s_perf_last_frame_time = delta;
-  s_perf_frame_times[s_perf_index] = delta;
-  s_perf_index = (s_perf_index + 1) % PERF_SAMPLES;
+  if (s_perf_frame_start != 0) {
+    uint32_t delta = now - s_perf_frame_start;
 
-  // Calculate average frame time
-  uint32_t sum = 0;
-  for (int i = 0; i < PERF_SAMPLES; i++) {
-    sum += s_perf_frame_times[i];
+    s_perf_last_frame_time = delta;
+    s_perf_frame_times[s_perf_index] = delta;
+    s_perf_index = (s_perf_index + 1) % PERF_SAMPLES;
+
+    // Calculate average frame time
+    uint32_t sum = 0;
+    int count = 0;
+    for (int i = 0; i < PERF_SAMPLES; i++) {
+      if (s_perf_frame_times[i] > 0) {
+        sum += s_perf_frame_times[i];
+        count++;
+      }
+    }
+    uint32_t avg_frame_time = (count > 0) ? (sum / count) : 0;
+
+    // Calculate FPS (avoid divide by zero)
+    s_perf_fps = (avg_frame_time > 0) ? (1000 / avg_frame_time) : 0;
   }
-  uint32_t avg_frame_time = sum / PERF_SAMPLES;
 
-  // Calculate FPS (avoid divide by zero)
-  s_perf_fps = (avg_frame_time > 0) ? (1000 / avg_frame_time) : 0;
+  // Anchor the start of the next measurement to *now*, capturing any
+  // sys.sleep() block or loop overhead that occurs outside of begin/end.
+  s_perf_frame_start = now;
 
   return 0;
 }
@@ -1273,6 +1289,274 @@ static const luaL_Reg l_perf_lib[] = {
     {"beginFrame", l_perf_beginFrame}, {"endFrame", l_perf_endFrame},
     {"getFPS", l_perf_getFPS},         {"getFrameTime", l_perf_getFrameTime},
     {"drawFPS", l_perf_drawFPS},       {NULL, NULL}};
+
+// ── picocalc.graphics.* ──────────────────────────────────────────────────────
+
+#define GRAPHICS_IMAGE_MT "picocalc.graphics.image"
+
+static uint16_t s_graphics_color = COLOR_WHITE;
+static uint16_t s_graphics_bg_color = COLOR_BLACK;
+
+typedef struct {
+  int w;
+  int h;
+  uint16_t *data;
+} lua_image_t;
+
+static lua_image_t *check_image(lua_State *L, int idx) {
+  return (lua_image_t *)luaL_checkudata(L, idx, GRAPHICS_IMAGE_MT);
+}
+
+static int l_graphics_image_gc(lua_State *L) {
+  lua_image_t *img = check_image(L, 1);
+  if (img->data) {
+    umm_free(img->data);
+    img->data = NULL;
+  }
+  return 0;
+}
+
+static int l_graphics_setColor(lua_State *L) {
+  s_graphics_color = l_checkcolor(L, 1);
+  return 0;
+}
+
+static int l_graphics_setBackgroundColor(lua_State *L) {
+  s_graphics_bg_color = l_checkcolor(L, 1);
+  return 0;
+}
+
+static int l_graphics_clear(lua_State *L) {
+  uint16_t color =
+      (lua_gettop(L) >= 1) ? l_checkcolor(L, 1) : s_graphics_bg_color;
+  display_clear(color);
+  return 0;
+}
+
+static int l_graphics_image_new(lua_State *L) {
+  int w = luaL_checkinteger(L, 1);
+  int h = luaL_checkinteger(L, 2);
+  if (w <= 0 || h <= 0)
+    return luaL_error(L, "invalid image dimensions");
+
+  lua_image_t *img = (lua_image_t *)lua_newuserdata(L, sizeof(lua_image_t));
+  img->w = w;
+  img->h = h;
+  img->data = (uint16_t *)umm_malloc(w * h * sizeof(uint16_t));
+  if (!img->data)
+    return luaL_error(L, "out of memory allocating image");
+
+  memset(img->data, 0, w * h * sizeof(uint16_t));
+
+  luaL_setmetatable(L, GRAPHICS_IMAGE_MT);
+  return 1;
+}
+
+static int l_graphics_image_load(lua_State *L) {
+  const char *path = luaL_checkstring(L, 1);
+
+  if (!fs_sandbox_check(L, path, false)) {
+    return luaL_error(L, "access denied");
+  }
+
+  sdfile_t f = sdcard_fopen(path, "r");
+  if (!f)
+    return luaL_error(L, "file not found");
+
+  uint8_t header[54];
+  if (sdcard_fread(f, header, 54) != 54 || header[0] != 'B' ||
+      header[1] != 'M') {
+    sdcard_fclose(f);
+    return luaL_error(L, "invalid BMP format");
+  }
+
+  uint32_t data_offset = *(uint32_t *)&header[10];
+  int w = *(int32_t *)&header[18];
+  int h = *(int32_t *)&header[22];
+  uint16_t bpp = *(uint16_t *)&header[28];
+  uint32_t compression = *(uint32_t *)&header[30];
+
+  if (compression != 0 && compression != 3) {
+    sdcard_fclose(f);
+    return luaL_error(L, "unsupported BMP compression");
+  }
+
+  if (bpp != 16 && bpp != 24 && bpp != 32) {
+    sdcard_fclose(f);
+    return luaL_error(L, "unsupported BMP depth (%d bpp)", bpp);
+  }
+
+  bool flip_y = true;
+  if (h < 0) {
+    h = -h;
+    flip_y = false;
+  }
+
+  if (w <= 0 || h <= 0 || w > 2048 || h > 2048) {
+    sdcard_fclose(f);
+    return luaL_error(L, "invalid BMP dimensions");
+  }
+
+  lua_image_t *img = (lua_image_t *)lua_newuserdata(L, sizeof(lua_image_t));
+  img->w = w;
+  img->h = h;
+  img->data = (uint16_t *)umm_malloc(w * h * sizeof(uint16_t));
+  if (!img->data) {
+    sdcard_fclose(f);
+    return luaL_error(L, "out of memory allocating image");
+  }
+  luaL_setmetatable(L, GRAPHICS_IMAGE_MT);
+
+  sdcard_fseek(f, data_offset);
+
+  int row_bytes = ((w * bpp + 31) / 32) * 4;
+  uint8_t *row_buf = (uint8_t *)umm_malloc(row_bytes);
+  if (!row_buf) {
+    umm_free(img->data);
+    sdcard_fclose(f);
+    return luaL_error(L, "out of memory allocating row buffer");
+  }
+
+  for (int y = 0; y < h; y++) {
+    int dest_y = flip_y ? (h - 1 - y) : y;
+    if (sdcard_fread(f, row_buf, row_bytes) != row_bytes)
+      break;
+
+    for (int x = 0; x < w; x++) {
+      uint16_t color = 0;
+      if (bpp == 24) {
+        uint8_t b = row_buf[x * 3];
+        uint8_t g = row_buf[x * 3 + 1];
+        uint8_t r = row_buf[x * 3 + 2];
+        color = RGB565(r, g, b);
+      } else if (bpp == 32) {
+        uint8_t b = row_buf[x * 4];
+        uint8_t g = row_buf[x * 4 + 1];
+        uint8_t r = row_buf[x * 4 + 2];
+        color = RGB565(r, g, b);
+      } else if (bpp == 16) {
+        uint16_t p = *(uint16_t *)&row_buf[x * 2];
+        color = p;
+      }
+      img->data[dest_y * w + x] = color;
+    }
+  }
+
+  umm_free(row_buf);
+  sdcard_fclose(f);
+  return 1;
+}
+
+static int l_graphics_image_getSize(lua_State *L) {
+  lua_image_t *img = check_image(L, 1);
+  lua_pushinteger(L, img->w);
+  lua_pushinteger(L, img->h);
+  return 2;
+}
+
+static int l_graphics_image_copy(lua_State *L) {
+  lua_image_t *src = check_image(L, 1);
+  lua_image_t *dst = (lua_image_t *)lua_newuserdata(L, sizeof(lua_image_t));
+  dst->w = src->w;
+  dst->h = src->h;
+  dst->data = (uint16_t *)umm_malloc(dst->w * dst->h * sizeof(uint16_t));
+  if (!dst->data)
+    return luaL_error(L, "out of memory allocating image copy");
+  memcpy(dst->data, src->data, dst->w * dst->h * sizeof(uint16_t));
+  luaL_setmetatable(L, GRAPHICS_IMAGE_MT);
+  return 1;
+}
+
+static int l_graphics_image_draw(lua_State *L) {
+  lua_image_t *img = check_image(L, 1);
+  int x = luaL_checkinteger(L, 2);
+  int y = luaL_checkinteger(L, 3);
+
+  bool flip_x = false;
+  bool flip_y = false;
+  if (lua_istable(L, 4)) {
+    lua_getfield(L, 4, "flipX");
+    flip_x = lua_toboolean(L, -1);
+    lua_pop(L, 1);
+    lua_getfield(L, 4, "flipY");
+    flip_y = lua_toboolean(L, -1);
+    lua_pop(L, 1);
+  } else if (lua_isboolean(L, 4)) {
+    flip_x = lua_toboolean(L, 4);
+  }
+
+  int sx = 0, sy = 0, sw = img->w, sh = img->h;
+  if (lua_istable(L, 5)) {
+    lua_getfield(L, 5, "x");
+    sx = luaL_optinteger(L, -1, 0);
+    lua_pop(L, 1);
+    lua_getfield(L, 5, "y");
+    sy = luaL_optinteger(L, -1, 0);
+    lua_pop(L, 1);
+    lua_getfield(L, 5, "w");
+    sw = luaL_optinteger(L, -1, img->w);
+    lua_pop(L, 1);
+    lua_getfield(L, 5, "h");
+    sh = luaL_optinteger(L, -1, img->h);
+    lua_pop(L, 1);
+  }
+
+  display_draw_image_partial(x, y, img->w, img->h, img->data, sx, sy, sw, sh,
+                             flip_x, flip_y);
+  return 0;
+}
+
+static int l_graphics_image_drawAnchored(lua_State *L) {
+  lua_image_t *img = check_image(L, 1);
+  int x = luaL_checkinteger(L, 2);
+  int y = luaL_checkinteger(L, 3);
+  double ax = luaL_checknumber(L, 4);
+  double ay = luaL_checknumber(L, 5);
+
+  x -= (int)(img->w * ax);
+  y -= (int)(img->h * ay);
+
+  display_draw_image_partial(x, y, img->w, img->h, img->data, 0, 0, img->w,
+                             img->h, false, false);
+  return 0;
+}
+
+static int l_graphics_image_drawTiled(lua_State *L) {
+  lua_image_t *img = check_image(L, 1);
+  int x = luaL_checkinteger(L, 2);
+  int y = luaL_checkinteger(L, 3);
+  int rect_w = luaL_checkinteger(L, 4);
+  int rect_h = luaL_checkinteger(L, 5);
+
+  for (int ty = 0; ty < rect_h; ty += img->h) {
+    for (int tx = 0; tx < rect_w; tx += img->w) {
+      int draw_w = (tx + img->w > rect_w) ? (rect_w - tx) : img->w;
+      int draw_h = (ty + img->h > rect_h) ? (rect_h - ty) : img->h;
+      display_draw_image_partial(x + tx, y + ty, img->w, img->h, img->data, 0,
+                                 0, draw_w, draw_h, false, false);
+    }
+  }
+
+  return 0;
+}
+
+static const luaL_Reg l_graphics_image_methods[] = {
+    {"getSize", l_graphics_image_getSize},
+    {"copy", l_graphics_image_copy},
+    {"draw", l_graphics_image_draw},
+    {"drawAnchored", l_graphics_image_drawAnchored},
+    {"drawTiled", l_graphics_image_drawTiled},
+    {NULL, NULL}};
+
+static const luaL_Reg l_graphics_image_lib[] = {{"new", l_graphics_image_new},
+                                                {"load", l_graphics_image_load},
+                                                {NULL, NULL}};
+
+static const luaL_Reg l_graphics_lib[] = {
+    {"setColor", l_graphics_setColor},
+    {"setBackgroundColor", l_graphics_setBackgroundColor},
+    {"clear", l_graphics_clear},
+    {NULL, NULL}};
 
 // ── picocalc.ui.*
 // ─────────────────────────────────────────────────────────────
@@ -1333,6 +1617,13 @@ void lua_bridge_register(lua_State *L) {
   // Reset per-app menu state before registering a new app
   s_lua_callback_count = 0;
   system_menu_clear_items();
+
+  // Reset performance counters so FPS tracking doesn't carry over from last app
+  s_perf_frame_start = 0;
+  s_perf_index = 0;
+  s_perf_fps = 0;
+  s_perf_last_frame_time = 0;
+  memset(s_perf_frame_times, 0, sizeof(s_perf_frame_times));
 
   // Close any HTTP connections leaked by the previous app.
   // Normally __gc handles this, but http_close_all() is a safety net.
@@ -1472,6 +1763,27 @@ void lua_bridge_register(lua_State *L) {
   lua_setfield(L, -2, "kStatusNotAvailable");
 
   lua_setfield(L, -2, "network"); // picocalc.network = network table
+
+  // ── picocalc.graphics ───────────────────────────────────────────────────
+
+  // Install Graphics Image metatable
+  luaL_newmetatable(L, GRAPHICS_IMAGE_MT);
+  lua_pushvalue(L, -1);
+  lua_setfield(L, -2, "__index");
+  luaL_setfuncs(L, l_graphics_image_methods, 0);
+  lua_pushcfunction(L, l_graphics_image_gc);
+  lua_setfield(L, -2, "__gc");
+  lua_pop(L, 1);
+
+  // Build picocalc.graphics table
+  lua_newtable(L);
+  luaL_setfuncs(L, l_graphics_lib, 0); // setColor, setBackgroundColor, clear
+
+  lua_newtable(L);
+  luaL_setfuncs(L, l_graphics_image_lib, 0);
+  lua_setfield(L, -2, "image"); // graphics.image = image table
+
+  lua_setfield(L, -2, "graphics"); // picocalc.graphics = graphics table
 
   // Set as global
   lua_setglobal(L, "picocalc");

@@ -57,6 +57,13 @@ int display_text_width(const char *text);
 // Out-of-bounds pixels are clipped silently.
 void display_draw_image(int x, int y, int w, int h, const uint16_t *data);
 
+// Blit a sub-rectangle of an image to the framebuffer at (x, y).
+// sx, sy, sw, sh define the source rectangle within the w x h image.
+// flip_x and flip_y mirror the drawing horizontally and vertically.
+void display_draw_image_partial(int x, int y, int img_w, int img_h,
+                                const uint16_t *data, int sx, int sy, int sw,
+                                int sh, bool flip_x, bool flip_y);
+
 // Push framebuffer to LCD (starts DMA transfer in the background).
 void display_flush(void);
 

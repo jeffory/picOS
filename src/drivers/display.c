@@ -495,6 +495,45 @@ void display_draw_image(int x, int y, int w, int h, const uint16_t *data) {
   }
 }
 
+void display_draw_image_partial(int x, int y, int img_w, int img_h,
+                                const uint16_t *data, int sx, int sy, int sw,
+                                int sh, bool flip_x, bool flip_y) {
+  if (sx < 0) {
+    sw += sx;
+    sx = 0;
+  }
+  if (sy < 0) {
+    sh += sy;
+    sy = 0;
+  }
+  if (sx + sw > img_w)
+    sw = img_w - sx;
+  if (sy + sh > img_h)
+    sh = img_h - sy;
+
+  if (sw <= 0 || sh <= 0)
+    return;
+
+  for (int row = 0; row < sh; row++) {
+    int py = y + row;
+    if (py < 0 || py >= FB_HEIGHT)
+      continue;
+
+    int src_row = flip_y ? (sy + sh - 1 - row) : (sy + row);
+
+    for (int col = 0; col < sw; col++) {
+      int px = x + col;
+      if (px < 0 || px >= FB_WIDTH)
+        continue;
+
+      int src_col = flip_x ? (sx + sw - 1 - col) : (sx + col);
+      uint16_t c = data[src_row * img_w + src_col];
+
+      s_framebuffer[py * FB_WIDTH + px] = (c >> 8) | (c << 8);
+    }
+  }
+}
+
 void display_flush(void) {
   if (s_dma_active) {
     // Wait for previous DMA completion
