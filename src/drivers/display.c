@@ -15,6 +15,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../os/image_decoders.h"
+
 // ── Framebuffer ──────────────────────────────────────────────────────────────
 // Placed in internal SRAM smoothly now that the Lua heap has been relocated
 // to PSRAM, freeing up 256KB of internal memory!
@@ -532,6 +534,29 @@ void display_draw_image_partial(int x, int y, int img_w, int img_h,
       s_framebuffer[py * FB_WIDTH + px] = (c >> 8) | (c << 8);
     }
   }
+}
+
+void display_draw_image_scaled(int x, int y, int img_w, int img_h,
+                               const uint16_t *data, float scale, float angle) {
+  // tgx_draw_image_scaled renders directly into the framebuffer using TGX's
+  // native RGB565 format (little-endian).  Our framebuffer stores pixels
+  // byte-swapped (big-endian) for the 8-bit DMA path, so we need to:
+  //   1. Byte-swap the affected region to native LE so TGX math is correct.
+  //   2. Let TGX render.
+  //   3. Byte-swap the entire affected region back to BE for the DMA flush.
+  //
+  // For simplicity we swap the whole framebuffer before/after since TGX's
+  // blitScaledRotated can touch any pixel.
+  uint16_t *fb = s_framebuffer;
+  size_t n = FB_WIDTH * FB_HEIGHT;
+  for (size_t i = 0; i < n; i++)
+    fb[i] = (fb[i] >> 8) | (fb[i] << 8);
+
+  tgx_draw_image_scaled(fb, FB_WIDTH, FB_HEIGHT, data, img_w, img_h, x, y,
+                        scale, angle);
+
+  for (size_t i = 0; i < n; i++)
+    fb[i] = (fb[i] >> 8) | (fb[i] << 8);
 }
 
 void display_flush(void) {

@@ -91,6 +91,38 @@ target_include_directories(fatfs PUBLIC
 )
 target_link_libraries(fatfs pico_stdlib hardware_spi hardware_gpio)
 
+# ── Image Decoders ────────────────────────────────────────────────────────────
+set(TGX_DIR ${CMAKE_SOURCE_DIR}/third_party/tgx)
+set(JPEGDEC_DIR ${CMAKE_SOURCE_DIR}/third_party/JPEGDEC)
+set(PNGDEC_DIR ${CMAKE_SOURCE_DIR}/third_party/PNGdec)
+set(GIF_DIR ${CMAKE_SOURCE_DIR}/third_party/AnimatedGIF)
+
+add_library(image_decoders STATIC
+    ${TGX_DIR}/src/Color.cpp
+    ${TGX_DIR}/src/Fonts.cpp
+    ${TGX_DIR}/src/Renderer3D.cpp
+    ${JPEGDEC_DIR}/src/JPEGDEC.cpp
+    ${PNGDEC_DIR}/src/PNGdec.cpp
+    ${PNGDEC_DIR}/src/adler32.c
+    ${PNGDEC_DIR}/src/crc32.c
+    ${PNGDEC_DIR}/src/infback.c
+    ${PNGDEC_DIR}/src/inffast.c
+    ${PNGDEC_DIR}/src/inflate.c
+    ${PNGDEC_DIR}/src/inftrees.c
+    ${PNGDEC_DIR}/src/zutil.c
+    ${GIF_DIR}/src/AnimatedGIF.cpp
+)
+
+target_include_directories(image_decoders PUBLIC
+    ${TGX_DIR}/src
+    ${JPEGDEC_DIR}/src
+    ${PNGDEC_DIR}/src
+    ${GIF_DIR}/src
+)
+
+target_compile_definitions(image_decoders PUBLIC __LINUX__=1)
+
+
 # ── Main firmware target ───────────────────────────────────────────────────────
 
 add_executable(picocalc_os
@@ -106,6 +138,7 @@ add_executable(picocalc_os
     src/os/clock.c
     src/os/tz_picker.c
     src/os/ui.c
+    src/os/image_decoders.cpp
     src/drivers/display.c
     src/drivers/keyboard.c
     src/drivers/sdcard.c
@@ -136,6 +169,7 @@ target_link_libraries(picocalc_os
     hardware_xip_cache
     lua
     fatfs
+    image_decoders
 )
 
 # ── WiFi support (Pico W / Pimoroni Pico Plus 2W boards) ─────────────────────

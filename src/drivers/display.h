@@ -64,6 +64,10 @@ void display_draw_image_partial(int x, int y, int img_w, int img_h,
                                 const uint16_t *data, int sx, int sy, int sw,
                                 int sh, bool flip_x, bool flip_y);
 
+// Draw a scaled/rotated image to the framebuffer at (x, y).
+void display_draw_image_scaled(int x, int y, int img_w, int img_h,
+                               const uint16_t *data, float scale, float angle);
+
 // Push framebuffer to LCD (starts DMA transfer in the background).
 void display_flush(void);
 

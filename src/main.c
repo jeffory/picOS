@@ -203,7 +203,8 @@ int main(void) {
     display_draw_text(8, 8, "SD card not found!", COLOR_RED, COLOR_BLACK);
     display_draw_text(8, 20, "Insert a FAT32 SD card", COLOR_WHITE,
                       COLOR_BLACK);
-    display_draw_text(8, 32, "and press A to retry.", COLOR_GRAY, COLOR_BLACK);
+    display_draw_text(8, 32, "and press Enter to retry.", COLOR_GRAY,
+                      COLOR_BLACK);
     display_flush();
 
     // Wait for A press then try again

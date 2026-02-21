@@ -1,1 +1,1 @@
-// Empty config file to satisfy umm_malloc.c included via CMake
+#define UMM_BLOCK_BODY_SIZE 128
