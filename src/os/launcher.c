@@ -26,7 +26,7 @@
 #define MAX_APPS 32
 
 typedef struct {
-  char id[64];           // Reverse DNS app ID (e.g., "com.picos.editor")
+  char id[80];           // Reverse DNS app ID (e.g., "com.picos.editor")
   char name[64];         // Display name from app.json
   char path[128];        // Full path to app directory on SD card
   char description[128]; // Short description from app.json
