@@ -97,6 +97,7 @@ add_executable(picocalc_os
     src/main.c
     src/os/launcher.c
     src/os/lua_bridge.c
+    src/os/lua_psram_alloc.c
     src/os/system_menu.c
     src/os/screenshot.c
     src/os/text_input.c
@@ -111,6 +112,7 @@ add_executable(picocalc_os
     src/drivers/wifi.c
     src/drivers/http.c
     third_party/mongoose/mongoose.c
+    third_party/umm_malloc/src/umm_malloc.c
 )
 
 target_include_directories(picocalc_os PRIVATE
@@ -118,6 +120,7 @@ target_include_directories(picocalc_os PRIVATE
     src/os/
     src/drivers/
     third_party/mongoose/
+    third_party/umm_malloc/src/
 )
 
 target_link_libraries(picocalc_os

@@ -19,12 +19,17 @@
 // On standard Pico 2 this will go to SRAM (204KB — tight, but usable).
 
 #ifdef PICO_RP2350
-// PSRAM section attribute — only works with Pimoroni SDK / linker script
-__attribute__((
-    section(".psram"))) static uint16_t s_framebuffer[FB_WIDTH * FB_HEIGHT];
+// Manually mapped to PSRAM base address to avoid orphaned linker sections
+// filling internal SRAM
+#define s_framebuffers ((uint16_t (*)[FB_WIDTH * FB_HEIGHT])0x11000000)
 #else
-static uint16_t s_framebuffer[FB_WIDTH * FB_HEIGHT];
+static uint16_t s_framebuffers[2][FB_WIDTH * FB_HEIGHT];
 #endif
+
+// Pointer to the current back buffer
+static uint16_t *s_framebuffer = s_framebuffers[0];
+static int s_back_buffer_idx = 0;
+static bool s_dma_active = false;
 
 // DMA channel for LCD transfers
 static int s_dma_chan = -1;
@@ -340,6 +345,12 @@ void display_init(void) {
 }
 
 void display_deinit(void) {
+  if (s_dma_active) {
+    dma_channel_wait_for_finish_blocking(s_dma_chan);
+    lcd_spi_wait_idle();
+    lcd_cs_high();
+    s_dma_active = false;
+  }
   if (s_dma_chan >= 0)
     dma_channel_unclaim(s_dma_chan);
   pio_sm_set_enabled(LCD_PIO, s_pio_sm, false);
@@ -491,22 +502,31 @@ void display_draw_image(int x, int y, int w, int h, const uint16_t *data) {
 }
 
 void display_flush(void) {
+  if (s_dma_active) {
+    // Wait for previous DMA completion
+    dma_channel_wait_for_finish_blocking(s_dma_chan);
+
+    // Ensure state machine is fully drained before deasserting CS
+    lcd_spi_wait_idle();
+
+    lcd_cs_high();
+  }
+
+  // Swap buffers
+  int front_buffer_idx = s_back_buffer_idx;
+  s_back_buffer_idx = 1 - s_back_buffer_idx;
+  s_framebuffer = s_framebuffers[s_back_buffer_idx];
+
   lcd_set_window(0, 0, FB_WIDTH - 1, FB_HEIGHT - 1);
 
   lcd_cs_low();
   lcd_dc_data();
 
   // DMA transfer: non-blocking, CPU-free framebuffer → SPI
-  dma_channel_set_read_addr(s_dma_chan, s_framebuffer, false);
+  dma_channel_set_read_addr(s_dma_chan, s_framebuffers[front_buffer_idx],
+                            false);
   dma_channel_set_trans_count(s_dma_chan, FB_SIZE, true); // start transfer
-
-  // Wait for DMA completion
-  dma_channel_wait_for_finish_blocking(s_dma_chan);
-
-  // Ensure state machine is fully drained before deasserting CS
-  lcd_spi_wait_idle();
-
-  lcd_cs_high();
+  s_dma_active = true;
 }
 
 void display_set_brightness(uint8_t brightness) {
@@ -516,14 +536,25 @@ void display_set_brightness(uint8_t brightness) {
 }
 
 void display_darken(void) {
-  // Halve each byte of the framebuffer independently using 32-bit words.
-  // The mask 0x7F7F7F7F prevents carry from one byte's LSB into the next.
-  // Minor cross-channel colour shift at channel boundaries is imperceptible
-  // in a menu overlay context.
-  uint32_t *p = (uint32_t *)s_framebuffer;
+  // If a DMA transfer is in progress, wait for it to finish and end the SPI
+  // transaction before we read the front buffer.
+  if (s_dma_active) {
+    dma_channel_wait_for_finish_blocking(s_dma_chan);
+    lcd_spi_wait_idle();
+    lcd_cs_high();
+    s_dma_active = false;
+  }
+
+  // With double buffering, s_framebuffer is the back buffer.  The front buffer
+  // (index 1 - s_back_buffer_idx) holds the content last sent to the display.
+  // Copy it into the back buffer with each byte halved so that overlay callers
+  // draw on top of the live (darkened) screen content rather than a stale frame.
+  const uint32_t *front =
+      (const uint32_t *)s_framebuffers[1 - s_back_buffer_idx];
+  uint32_t *back = (uint32_t *)s_framebuffer;
   size_t n = (FB_WIDTH * FB_HEIGHT * 2) / 4;
   for (size_t i = 0; i < n; i++)
-    p[i] = (p[i] >> 1) & 0x7F7F7F7FU;
+    back[i] = (front[i] >> 1) & 0x7F7F7F7FU;
 }
 
 const uint16_t *display_get_framebuffer(void) { return s_framebuffer; }
