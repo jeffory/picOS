@@ -1,6 +1,7 @@
 -- 3D Spinning Hexagon Demo
 -- Tests display performance with real-time 3D graphics
 
+local pc = picocalc
 local disp = picocalc.display
 local input = picocalc.input
 local sys = picocalc.sys
