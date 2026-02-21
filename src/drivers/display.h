@@ -5,13 +5,13 @@
 
 // =============================================================================
 // ST7365P Display Driver
-// 320x320 IPS LCD via SPI1 on PicoCalc mainboard v2.0
+// 320x320 IPS LCD via PIO SPI on PicoCalc mainboard v2.0
 //
-// The framebuffer lives in PSRAM (Pimoroni Pico Plus 2W provides 8MB).
-// Core 1 handles periodic flush from framebuffer → LCD over SPI.
-// Core 0 runs the OS + Lua. Both cores share the framebuffer via a mutex.
+// Double-buffered framebuffers (2× 200 KB) reside in internal SRAM.
+// The Lua heap is in PSRAM (6 MB), freeing SRAM for the framebuffers.
+// DMA flushes run asynchronously so the CPU can draw the next frame.
 //
-// LCD uses a dedicated PIO SPI master to avoid contending with WiFi on SPI1.
+// LCD uses a dedicated PIO SPI master (pio0), not a hardware SPI peripheral.
 // =============================================================================
 
 // RGB565 colour helpers

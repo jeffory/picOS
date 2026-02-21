@@ -1712,6 +1712,12 @@ static int l_graphics_image_getSupportedFormats(lua_State *L) {
   lua_newtable(L);
   lua_pushstring(L, "BMP");
   lua_rawseti(L, -2, 1);
+  lua_pushstring(L, "JPEG");
+  lua_rawseti(L, -2, 2);
+  lua_pushstring(L, "PNG");
+  lua_rawseti(L, -2, 3);
+  lua_pushstring(L, "GIF");
+  lua_rawseti(L, -2, 4);
   return 1;
 }
 
