@@ -1,4 +1,6 @@
 #include "hardware/clocks.h"
+#include "hardware/gpio.h"
+#include "hardware/structs/xip.h"
 #include "hardware/watchdog.h"
 #include "pico/multicore.h"
 #include "pico/stdlib.h"
@@ -163,6 +165,13 @@ int main(void) {
   g_api.wifi = &s_wifi_impl;
   // fs and audio wired after their init below
 
+  // Explicitly configure PSRAM hardware pins and XIP write logic for the Pico
+  // Plus 2W before any PSRAM pointers are accessed.
+#ifdef PICO_RP2350
+  gpio_set_function(47, GPIO_FUNC_XIP_CS1);
+  xip_ctrl_hw->ctrl |= XIP_CTRL_WRITABLE_M1_BITS;
+#endif
+
   // Initialise display first so we can show progress
   display_init();
   draw_splash("Initialising keyboard...");
@@ -214,6 +223,9 @@ int main(void) {
   // Load persisted settings from /system/config.json
   config_load();
 
+  // Initialize the PSRAM allocator for Lua (used by Mongoose and Lua)
+  lua_psram_alloc_init();
+
   // Initialise WiFi hardware (auto-connects if credentials are in config)
   draw_splash("Initialising WiFi...");
   wifi_init();
@@ -223,9 +235,6 @@ int main(void) {
   multicore_launch_core1(core1_entry);
 
   system_menu_init();
-
-  // Initialize the PSRAM allocator for Lua
-  lua_psram_alloc_init();
 
   draw_splash("Loading...");
   sleep_ms(300); // Brief pause so the splash is visible

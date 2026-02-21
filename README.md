@@ -11,9 +11,9 @@ Other hardware support is untested currently.
 ## Architecture
 
 ```
-Flash (resident, never replaced)
-├── OS kernel + drivers
-├── Lua 5.4 runtime
+Flash & Memory
+├── OS kernel + drivers (Double-buffered 60 FPS tear-free display via 100MHz SPI)
+├── Lua 5.4 runtime (Resident 6MB heap securely mapped into PSRAM)
 └── Launcher (app menu)
 
 SD Card (hot-swappable)
@@ -344,5 +344,6 @@ picocalc-os/
 │   └── snake/                 ← example: full game
 └── third_party/
     ├── lua-5.4/               ← Lua 5.4 source
-    └── fatfs/                 ← Chan FatFS + SPI port
+    ├── fatfs/                 ← Chan FatFS + SPI port
+    └── umm_malloc/            ← Embedded memory allocator for PSRAM Lua heap (MIT Licensed)
 ```

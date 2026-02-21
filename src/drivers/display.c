@@ -6,6 +6,7 @@
 #include "hardware/gpio.h"
 #include "hardware/pio.h"
 #include "hardware/timer.h"
+#include "hardware/xip_cache.h"
 #include "lcd_spi.pio.h"
 #include "pico/stdlib.h"
 
@@ -15,16 +16,9 @@
 #include <string.h>
 
 // ── Framebuffer ──────────────────────────────────────────────────────────────
-// Placed in PSRAM via linker section on Pimoroni Pico Plus 2W.
-// On standard Pico 2 this will go to SRAM (204KB — tight, but usable).
-
-#ifdef PICO_RP2350
-// Manually mapped to PSRAM base address to avoid orphaned linker sections
-// filling internal SRAM
-#define s_framebuffers ((uint16_t (*)[FB_WIDTH * FB_HEIGHT])0x11000000)
-#else
+// Placed in internal SRAM smoothly now that the Lua heap has been relocated
+// to PSRAM, freeing up 256KB of internal memory!
 static uint16_t s_framebuffers[2][FB_WIDTH * FB_HEIGHT];
-#endif
 
 // Pointer to the current back buffer
 static uint16_t *s_framebuffer = s_framebuffers[0];
@@ -548,7 +542,8 @@ void display_darken(void) {
   // With double buffering, s_framebuffer is the back buffer.  The front buffer
   // (index 1 - s_back_buffer_idx) holds the content last sent to the display.
   // Copy it into the back buffer with each byte halved so that overlay callers
-  // draw on top of the live (darkened) screen content rather than a stale frame.
+  // draw on top of the live (darkened) screen content rather than a stale
+  // frame.
   const uint32_t *front =
       (const uint32_t *)s_framebuffers[1 - s_back_buffer_idx];
   uint32_t *back = (uint32_t *)s_framebuffer;

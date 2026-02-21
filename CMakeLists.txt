@@ -133,6 +133,7 @@ target_link_libraries(picocalc_os
     hardware_dma
     hardware_clocks
     hardware_pio
+    hardware_xip_cache
     lua
     fatfs
 )
