@@ -1,4 +1,5 @@
 #include "system_menu.h"
+#include "lua_psram_alloc.h"
 #include "../drivers/display.h"
 #include "../drivers/keyboard.h"
 #include "../drivers/sdcard.h"
@@ -55,6 +56,7 @@ typedef enum {
   ITEM_BATTERY,
   ITEM_WIFI,
   ITEM_TIMEZONE,
+  ITEM_RAM_INFO,
   ITEM_REMOUNT_SD,
   ITEM_USB_MSC,
   ITEM_SCREENSHOT,
@@ -243,6 +245,14 @@ static void draw_panel(const flat_item_t *items, int count, int sel, int px,
         snprintf(label, sizeof(label), "Timezone: UTC");
       break;
     }
+    case ITEM_RAM_INFO: {
+      size_t free_kb  = lua_psram_alloc_free_size() / 1024;
+      size_t total_kb = lua_psram_alloc_total_size() / 1024;
+      size_t used_kb  = total_kb - free_kb;
+      snprintf(label, sizeof(label), "PSRAM: %uk/%uk used", (unsigned)used_kb, (unsigned)total_kb);
+      fg = (free_kb > 512) ? COLOR_GREEN : (free_kb > 128) ? COLOR_YELLOW : COLOR_RED;
+      break;
+    }
     case ITEM_REMOUNT_SD:
       snprintf(label, sizeof(label), "Remount SD Card");
       break;
@@ -302,7 +312,7 @@ void system_menu_clear_items(void) { s_app_item_count = 0; }
 void system_menu_show(lua_State *L) {
   // Build flat item list: app items first, then built-ins.
   // ITEM_EXIT is omitted when called from the launcher (L == NULL).
-  flat_item_t items[SYSMENU_MAX_APP_ITEMS + 7];
+  flat_item_t items[SYSMENU_MAX_APP_ITEMS + 8];
   int count = 0;
 
   for (int i = 0; i < s_app_item_count; i++) {
@@ -313,6 +323,7 @@ void system_menu_show(lua_State *L) {
   items[count++] = (flat_item_t){ITEM_BRIGHTNESS, 0};
   items[count++] = (flat_item_t){ITEM_BATTERY, 0};
   items[count++] = (flat_item_t){ITEM_WIFI, 0};
+  items[count++] = (flat_item_t){ITEM_RAM_INFO, 0};
   items[count++] = (flat_item_t){ITEM_TIMEZONE, 0};
   items[count++] = (flat_item_t){ITEM_REMOUNT_SD, 0};
   if (L == NULL) {
@@ -390,6 +401,8 @@ void system_menu_show(lua_State *L) {
         need_redraw = true;
         break;
       case ITEM_BATTERY:
+        break;
+      case ITEM_RAM_INFO:
         break;
       case ITEM_WIFI:
         if (wifi_is_available()) {

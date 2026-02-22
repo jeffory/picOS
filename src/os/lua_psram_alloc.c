@@ -1,5 +1,6 @@
 #include "lua_psram_alloc.h"
 #include "umm_malloc.h"
+#include "umm_malloc_cfg.h"
 #include <stdint.h>
 #include <stdio.h>
 
@@ -50,6 +51,14 @@ void *lua_psram_alloc(void *ud, void *ptr, size_t osize, size_t nsize) {
   } else {
     return umm_realloc(ptr, nsize);
   }
+}
+
+size_t lua_psram_alloc_free_size(void) {
+  return umm_free_heap_size();
+}
+
+size_t lua_psram_alloc_total_size(void) {
+  return (size_t)UMM_MALLOC_CFG_HEAP_SIZE;
 }
 
 lua_State *lua_psram_newstate(void) {

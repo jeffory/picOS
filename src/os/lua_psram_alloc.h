@@ -10,3 +10,7 @@ void *lua_psram_alloc(void *ud, void *ptr, size_t osize, size_t nsize);
 
 // Create a new Lua state using the PSRAM allocator
 lua_State *lua_psram_newstate(void);
+
+// Memory stats for the PSRAM Lua heap
+size_t lua_psram_alloc_free_size(void);
+size_t lua_psram_alloc_total_size(void);

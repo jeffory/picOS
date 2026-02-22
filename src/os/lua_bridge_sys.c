@@ -1,4 +1,6 @@
 #include "lua_bridge_internal.h"
+#include "lua_psram_alloc.h"
+#include <malloc.h>
 
 // ── picocalc.sys.* ───────────────────────────────────────────────────────────
 
@@ -111,6 +113,27 @@ static int l_sys_getClock(lua_State *L) {
   return 1;
 }
 
+static int l_sys_getMemInfo(lua_State *L) {
+  size_t psram_free  = lua_psram_alloc_free_size();
+  size_t psram_total = lua_psram_alloc_total_size();
+  size_t psram_used  = psram_total - psram_free;
+
+  struct mallinfo mi = mallinfo();
+
+  lua_createtable(L, 0, 5);
+  lua_pushinteger(L, (lua_Integer)psram_free);
+  lua_setfield(L, -2, "psram_free");
+  lua_pushinteger(L, (lua_Integer)psram_used);
+  lua_setfield(L, -2, "psram_used");
+  lua_pushinteger(L, (lua_Integer)psram_total);
+  lua_setfield(L, -2, "psram_total");
+  lua_pushinteger(L, (lua_Integer)mi.fordblks);
+  lua_setfield(L, -2, "sram_free");
+  lua_pushinteger(L, (lua_Integer)mi.uordblks);
+  lua_setfield(L, -2, "sram_used");
+  return 1;
+}
+
 static int l_sys_addMenuItem(lua_State *L) {
   const char *label = luaL_checkstring(L, 1);
   luaL_checktype(L, 2, LUA_TFUNCTION);
@@ -137,7 +160,8 @@ static int l_sys_clearMenuItems(lua_State *L) {
   return 0;
 }
 
-static const luaL_Reg l_sys_lib[] = {{"getTimeMs", l_sys_getTimeMs},
+static const luaL_Reg l_sys_lib[] = {{"getMemInfo", l_sys_getMemInfo},
+                                     {"getTimeMs", l_sys_getTimeMs},
                                      {"getBattery", l_sys_getBattery},
                                      {"log", l_sys_log},
                                      {"sleep", l_sys_sleep},
