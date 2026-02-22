@@ -32,12 +32,47 @@ local tests = {
 
 local test_order = {"battery", "usb", "time", "log", "fs_read", "fs_mkdir", "fs_write", "fs_list", "wifi_avail", "wifi_status"}
 
-local mode = "auto"  -- "auto" or "reboot_confirm"
+local mode = "tabs"  -- Always use tabbed interface now
 local start_time = 0
 local data_dir = "/data/" .. APP_ID
 local test_file = data_dir .. "/systest.txt"
-local last_char = ""
 local button_state = 0
+
+-- Tab demo state
+local active_tab = 1
+local tab_labels = {"Tests", "Input", "Display", "Network", "System"}
+local nav_keys = {prev = input.BTN_LEFT, next = input.BTN_RIGHT}
+
+-- Input test state (from keytest)
+local MAX_HISTORY = 16
+local history = {}
+local last_raw = 0
+local last_char = nil
+
+local function push_history(line)
+    table.insert(history, 1, line)
+    if #history > MAX_HISTORY then table.remove(history) end
+end
+
+local BTN_LABELS = {
+    { input.BTN_UP,    "UP" },
+    { input.BTN_DOWN,  "DOWN" },
+    { input.BTN_LEFT,  "LEFT" },
+    { input.BTN_RIGHT, "RIGHT" },
+    { input.BTN_ENTER, "Enter" },
+    { input.BTN_ESC,   "Esc" },
+    { input.BTN_MENU,  "Sym" },
+    { input.BTN_TAB,   "Tab" },
+}
+
+local function btn_names(mask)
+    if mask == 0 then return nil end
+    local t = {}
+    for _, b in ipairs(BTN_LABELS) do
+        if mask & b[1] ~= 0 then t[#t + 1] = b[2] end
+    end
+    return #t > 0 and table.concat(t, "+") or nil
+end
 
 -- ── Test Functions ────────────────────────────────────────────────────────────
 
@@ -192,87 +227,123 @@ local function draw_status_color(status)
     end
 end
 
-local function draw_test_results()
-    local y = 36
-    local line_height = 11
-    
-    for _, key in ipairs(test_order) do
-        local test = tests[key]
-        local color = draw_status_color(test.status)
-        
-        -- Test name (shorter width)
-        disp.drawText(4, y, test.name, FG, BG)
-        
-        -- Status
-        local status_x = 90
-        disp.drawText(status_x, y, test.status, color, BG)
-        
-        -- Value (truncate if too long)
-        if test.value ~= "" then
-            local value_x = 150
-            local max_len = 28  -- Fit within screen
-            local display_val = test.value
-            if #display_val > max_len then
-                display_val = display_val:sub(1, max_len - 3) .. "..."
-            end
-            disp.drawText(value_x, y, display_val, DIM, BG)
-        end
-        
-        y = y + line_height
-    end
-end
-
-local function draw_auto_mode()
+local function draw_tabs_demo()
     disp.clear(BG)
     
-    -- Header
     pc.ui.drawHeader("System Test Suite")
     
-    -- Test results
-    draw_test_results()
+    -- Draw tabs with customizable navigation keys
+    local new_tab, height = pc.ui.drawTabs(29, tab_labels, active_tab, 
+                                           nav_keys.prev, nav_keys.next)
+    active_tab = new_tab
     
-    -- Runtime info (more compact)
-    local y = 150
-    local runtime = sys.getTimeMs() - start_time
-    disp.drawText(4, y, "Runtime: " .. runtime .. " ms", DIM, BG)
-    y = y + 10
+    -- Content area starts below tabs
+    local content_y = 29 + height + 10
     
-    -- Current time
-    disp.drawText(4, y, "Time: " .. sys.getTimeMs() .. " ms", DIM, BG)
-    y = y + 10
-    
-    -- Button state display
-    disp.drawText(4, y, "Btns: 0x" .. string.format("%X", button_state), DIM, BG)
-    
-    -- Last character typed (on right side)
-    if last_char ~= "" then
-        disp.drawText(160, y, "Key: '" .. last_char .. "'", DIM, BG)
+    -- Draw content based on active tab
+    if active_tab == 1 then
+        -- Tests tab - show test results
+        local y = content_y
+        local line_height = 11
+        
+        for _, key in ipairs(test_order) do
+            local test = tests[key]
+            local color = draw_status_color(test.status)
+            
+            disp.drawText(4, y, test.name, FG, BG)
+            local status_x = 70
+            disp.drawText(status_x, y, test.status, color, BG)
+            
+            if test.value ~= "" then
+                local value_x = 110
+                local max_len = 28
+                local display_val = test.value
+                if #display_val > max_len then
+                    display_val = display_val:sub(1, max_len - 3) .. "..."
+                end
+                disp.drawText(value_x, y, display_val, DIM, BG)
+            end
+            
+            y = y + line_height
+        end
+        
+        -- Runtime info
+        y = y + 10
+        local runtime = sys.getTimeMs() - start_time
+        disp.drawText(4, y, "Runtime: " .. runtime .. " ms", DIM, BG)
+        
+        -- Footer instructions
+        pc.ui.drawFooter("←/→:Tab  ENTER/R:Rerun  ESC:Exit", nil)
+        
+    elseif active_tab == 2 then
+        -- Input tab with keytest functionality
+        disp.drawText(20, content_y, "Input Tab", TITLE, BG)
+        content_y = content_y + 16
+        
+        -- Last raw keycode
+        disp.drawText(20, content_y, "Last raw:", DIM, BG)
+        content_y = content_y + 10
+        disp.drawText(80, content_y, string.format("0x%02X  (%d)", last_raw, last_raw), FG, BG)
+        content_y = content_y + 12
+        
+        -- Last character
+        disp.drawText(20, content_y, "Char:", DIM, BG)
+        if last_char then
+            local label = last_char
+            if string.byte(last_char) == 8 then label = "<Bkspc>" end
+            disp.drawText(80, content_y, "'" .. label .. "'", FG, BG)
+        else
+            disp.drawText(80, content_y, "(none)", DIM, BG)
+        end
+        content_y = content_y + 12
+        
+        -- Currently held
+        disp.drawText(20, content_y, "Held:", DIM, BG)
+        disp.drawText(80, content_y, btn_names(button_state) or "(none)", FG, BG)
+        content_y = content_y + 16
+        
+        -- Event log
+        disp.drawText(20, content_y, "Event log:", DIM, BG)
+        content_y = content_y + 10
+        for i, entry in ipairs(history) do
+            local y = content_y + (i - 1) * 10
+            if y < 300 then
+                disp.drawText(20, y, entry, i == 1 and FG or DIM, BG)
+            end
+        end
+        
+    elseif active_tab == 3 then
+        disp.drawText(20, content_y, "Display Tab", TITLE, BG)
+        content_y = content_y + 20
+        disp.drawText(20, content_y, "Resolution: 320x320", FG, BG)
+        content_y = content_y + 12
+        disp.drawText(20, content_y, "Color depth: RGB565", FG, BG)
+        content_y = content_y + 12
+        -- Draw a gradient demo
+        for i = 0, 50 do
+            local c = disp.rgb(i * 5, 100, 255 - i * 5)
+            disp.fillRect(20 + i * 2, content_y + 10, 2, 20, c)
+        end
+        
+    elseif active_tab == 4 then
+        disp.drawText(20, content_y, "Network Tab", TITLE, BG)
+        content_y = content_y + 20
+        disp.drawText(20, content_y, "WiFi: " .. tests.wifi_status.value, FG, BG)
+        content_y = content_y + 12
+        disp.drawText(20, content_y, "Status: " .. tests.wifi_avail.value, FG, BG)
+        
+    elseif active_tab == 5 then
+        disp.drawText(20, content_y, "System Tab", TITLE, BG)
+        content_y = content_y + 20
+        disp.drawText(20, content_y, "Uptime: " .. (sys.getTimeMs() - start_time) .. " ms", FG, BG)
+        content_y = content_y + 12
+        disp.drawText(20, content_y, "Battery: " .. tests.battery.value, FG, BG)
+        content_y = content_y + 12
+        disp.drawText(20, content_y, "USB: " .. tests.usb.value, FG, BG)
     end
-    y = y + 10
     
-    -- Instructions (compact)
-    pc.ui.drawFooter("ENTER:Rerun ESC:Exit", nil)
-end
-
-local function draw_reboot_mode()
-    disp.clear(BG)
-    
-    -- Warning
-    local y = 100
-    disp.drawText(80, y, "WARNING", WARN, BG)
-    y = y + 30
-    
-    disp.drawText(40, y, "Reboot the system?", FG, BG)
-    y = y + 30
-    
-    disp.drawText(20, y, "This will restart the Pico", DIM, BG)
-    y = y + 20
-    disp.drawText(20, y, "and return to the launcher.", DIM, BG)
-    
-    y = y + 40
-    disp.drawText(40, y, "ENTER: Reboot now", WARN, BG)
-    y = y + 20
-    disp.drawText(40, y, "ESC: Cancel", GOOD, BG)
+    -- Footer with instructions
+    pc.ui.drawFooter("F1:Exit  T:ToggleKeys  ESC:Back", nil)
 end
 
 -- ── Main Loop ─────────────────────────────────────────────────────────────────
@@ -285,52 +356,57 @@ run_all_tests()
 while true do
     input.update()
     local pressed = input.getButtonsPressed()
+    local released = input.getButtonsReleased()
     button_state = input.getButtons()
     
-    -- Check for character input
-    local ch = input.getChar()
-    if ch then
-        last_char = ch
+    -- Track raw key and character for Input tab
+    -- Get char first so it's available when we check raw key
+    last_char = input.getChar()
+    local raw = input.getRawKey()
+    if raw ~= 0 and raw ~= last_raw then
+        last_raw = raw
+        local label = ""
+        if last_char then
+            if string.byte(last_char) == 8 then
+                label = "<Bkspc>"
+            else
+                label = string.format("'%s'", last_char)
+            end
+        elseif btn_names(pressed) then
+            label = btn_names(pressed)
+        else
+            -- Raw key but no char and no button name - use raw key code
+            label = string.format("[0x%02X]", raw)
+        end
+        push_history(string.format("0x%02X  %s", raw, label))
     end
     
-    -- Mode handling
-    if mode == "auto" then
-        -- ESC: exit
-        if pressed & input.BTN_ESC ~= 0 then
-            return
-        end
-        
-        -- ENTER: rerun tests
-        if pressed & input.BTN_ENTER ~= 0 then
-            run_all_tests()
-            last_char = ""  -- Clear on test rerun
-        end
-        
-        -- MENU: go to reboot confirmation
-        if pressed & input.BTN_MENU ~= 0 then
-            mode = "reboot_confirm"
-        end
-        
-        draw_auto_mode()
-        
-    elseif mode == "reboot_confirm" then
-        -- ESC: cancel
-        if pressed & input.BTN_ESC ~= 0 then
-            mode = "auto"
-        end
-        
-        -- ENTER: actually reboot
-        if pressed & input.BTN_ENTER ~= 0 then
-            disp.clear(BG)
-            disp.drawText(80, 150, "Rebooting...", WARN, BG)
-            disp.flush()
-            sys.sleep(500)
-            sys.reboot()  -- This will never return
-        end
-        
-        draw_reboot_mode()
+    -- ESC: exit
+    if pressed & input.BTN_ESC ~= 0 then
+        return
     end
+    
+    -- ENTER or R: rerun tests
+    if pressed & input.BTN_ENTER ~= 0 or (last_char and last_char:upper() == "R") then
+        run_all_tests()
+        history = {}  -- Clear on test rerun
+        last_raw = 0
+        last_char = nil
+    end
+    
+    -- T: Toggle navigation keys between Left/Right and Up/Down
+    if last_char and last_char:upper() == "T" then
+        if nav_keys.prev == input.BTN_LEFT then
+            nav_keys.prev = input.BTN_UP
+            nav_keys.next = input.BTN_DOWN
+        else
+            nav_keys.prev = input.BTN_LEFT
+            nav_keys.next = input.BTN_RIGHT
+        end
+    end
+    
+    draw_tabs_demo()
     
     disp.flush()
-    sys.sleep(16)  -- ~60fps
+    sys.sleep(16)
 end
