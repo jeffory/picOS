@@ -54,13 +54,42 @@ void usb_msc_enter_mode(void) {
   // 3. Poll loop — tud_task() is also called by the SDK's background IRQ,
   //    but calling it here too ensures responsive MSC handling.
   printf("[USB MSC] Waiting for host or ESC key...\n");
+  
+  uint32_t poll_loop_ms = 0;
+  uint32_t last_kbd_poll_ms = 0;
+  const uint32_t KBD_POLL_INTERVAL_MS = 10;  // Poll keyboard every 10ms max
+  const uint32_t HOST_TIMEOUT_MS = 5000;      // 5 second timeout if no host activity
+  
   while (true) {
+    // Service USB, giving it priority
+    uint32_t poll_start = to_ms_since_boot(get_absolute_time());
     tud_task();
-    kbd_poll();
-    if (kbd_get_buttons_pressed() & BTN_ESC) {
+    
+    // Check ESC key with rate limiting to avoid I2C bus congestion
+    uint32_t now = to_ms_since_boot(get_absolute_time());
+    if (now - last_kbd_poll_ms >= KBD_POLL_INTERVAL_MS) {
+      kbd_poll();
+      last_kbd_poll_ms = now;
+      if (kbd_get_buttons_pressed() & BTN_ESC) {
+        printf("[USB MSC] ESC key pressed, exiting\n");
+        break;
+      }
+    }
+    
+    // Check if host is still connected
+    if (!tud_mounted() && poll_loop_ms > HOST_TIMEOUT_MS) {
+      printf("[USB MSC] Host disconnected for >%dms, exiting\n", HOST_TIMEOUT_MS);
       break;
     }
-    sleep_us(100); // 100µs — fast enough for MSC, lets I2C keyboard breathe
+    
+    // Track loop timing for timeout detection
+    uint32_t poll_end = to_ms_since_boot(get_absolute_time());
+    poll_loop_ms += (poll_end - poll_start);
+    if (poll_loop_ms > HOST_TIMEOUT_MS) {
+      poll_loop_ms = 0;  // Reset counter each 5 seconds
+    }
+    
+    sleep_us(100); // 100µs base interval
   }
 
   // 4. Deactivate MSC and remount
