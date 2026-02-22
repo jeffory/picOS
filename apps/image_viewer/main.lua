@@ -8,7 +8,7 @@ local fs    = pc.fs
 local sys   = pc.sys
 
 -- ── Constants ────────────────────────────────────────────────────────────────
-local ROOT_PATH    = "/data/image_viewer"
+local ROOT_PATH    = "/data/" .. APP_ID
 local SCREEN_W     = disp.getWidth()
 local SCREEN_H     = disp.getHeight()
 local CHAR_W       = 6

@@ -122,10 +122,10 @@ local function run_fs_write_test()
 end
 
 local function run_fs_list_test()
-    local entries = fs.listDir("/apps")
+    local entries = fs.listDir(APP_DIR)
     if entries and #entries > 0 then
         tests.fs_list.status = "PASS"
-        tests.fs_list.value = #entries .. " apps"
+        tests.fs_list.value = #entries .. " entries"
     else
         tests.fs_list.status = "FAIL"
         tests.fs_list.value = "No entries"

@@ -156,10 +156,16 @@ static void draw_browser(const char *path, int sel, int scroll) {
 // ── Public API
 // ────────────────────────────────────────────────────────────────
 
-bool file_browser_show(const char *start_path, char *out_path, int out_len) {
+bool file_browser_show(const char *start_path, const char *root_path,
+                       char *out_path, int out_len) {
   char cur_path[192];
   strncpy(cur_path, start_path, sizeof(cur_path) - 1);
   cur_path[sizeof(cur_path) - 1] = '\0';
+
+  // root_path is the highest directory the user may navigate to.
+  // Fall back to start_path if caller passes NULL.
+  if (!root_path)
+    root_path = start_path;
 
   load_dir(cur_path);
 
@@ -224,16 +230,21 @@ bool file_browser_show(const char *start_path, char *out_path, int out_len) {
     }
 
     if (pressed & BTN_ESC) {
-      // Go up one directory; cancel if already at the top
+      // Go up one directory; cancel if already at (or above) root_path
+      if (strcmp(cur_path, root_path) == 0) {
+        return false; // already at the sandbox root — cancel
+      }
       char *last_slash = strrchr(cur_path, '/');
       if (last_slash && last_slash != cur_path) {
         *last_slash = '\0';
+        // Don't let navigation go above root_path
+        if (strlen(cur_path) < strlen(root_path))
+          strncpy(cur_path, root_path, sizeof(cur_path) - 1);
         load_dir(cur_path);
         sel = 0;
         scroll = 0;
         need_redraw = true;
       } else {
-        // At root ("/") or single slash — user cancelled
         return false;
       }
     }

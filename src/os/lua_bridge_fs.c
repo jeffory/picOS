@@ -35,19 +35,25 @@ bool fs_sandbox_check(lua_State *L, const char *path, bool write) {
     return false;
   dirname++; // skip the '/'
 
-  // /data/<dirname> prefix (no trailing slash — also matches the dir itself)
+  // /data/<APP_ID> prefix — uses the app's declared identity, not its folder name
+  lua_getglobal(L, "APP_ID");
+  const char *app_id = lua_tostring(L, -1);
+  lua_pop(L, 1);
+  if (!app_id)
+    return false;
   char data_prefix[128];
-  int dp_len = snprintf(data_prefix, sizeof(data_prefix), "/data/%s", dirname);
+  int dp_len = snprintf(data_prefix, sizeof(data_prefix), "/data/%s", app_id);
   bool in_data = (strncmp(path, data_prefix, dp_len) == 0 &&
                   (path[dp_len] == '\0' || path[dp_len] == '/'));
 
   if (write)
     return in_data;
 
-  // For reads also allow /apps/<dirname>/...
+  // For reads also allow /apps/<dirname> itself and any path beneath it
   char app_prefix[128];
-  int ap_len = snprintf(app_prefix, sizeof(app_prefix), "/apps/%s/", dirname);
-  bool in_app = (strncmp(path, app_prefix, ap_len) == 0);
+  int ap_len = snprintf(app_prefix, sizeof(app_prefix), "/apps/%s", dirname);
+  bool in_app = (strncmp(path, app_prefix, ap_len) == 0 &&
+                 (path[ap_len] == '\0' || path[ap_len] == '/'));
 
   return in_data || in_app;
 }
@@ -201,28 +207,21 @@ static int l_fs_mkdir(lua_State *L) {
 static int l_fs_appPath(lua_State *L) {
   const char *name = luaL_checkstring(L, 1);
 
-  lua_getglobal(L, "APP_DIR");
-  const char *app_dir = lua_tostring(L, -1);
+  lua_getglobal(L, "APP_ID");
+  const char *app_id = lua_tostring(L, -1);
   lua_pop(L, 1);
-  if (!app_dir) {
+  if (!app_id) {
     lua_pushnil(L);
     return 1;
   }
 
-  const char *dirname = strrchr(app_dir, '/');
-  if (!dirname || dirname[1] == '\0') {
-    lua_pushnil(L);
-    return 1;
-  }
-  dirname++; // skip '/'
-
-  // Auto-create /data/<dirname>/ on first call
+  // Auto-create /data/<APP_ID>/ on first call
   char data_dir[128];
-  snprintf(data_dir, sizeof(data_dir), "/data/%s", dirname);
+  snprintf(data_dir, sizeof(data_dir), "/data/%s", app_id);
   sdcard_mkdir(data_dir);
 
   char full_path[192];
-  snprintf(full_path, sizeof(full_path), "/data/%s/%s", dirname, name);
+  snprintf(full_path, sizeof(full_path), "/data/%s/%s", app_id, name);
   lua_pushstring(L, full_path);
   return 1;
 }
@@ -234,29 +233,29 @@ static int l_fs_browse(lua_State *L) {
   const char *start_path;
   static char default_path[128];
 
+  // Always determine the app's data root for use as the browser root boundary.
+  lua_getglobal(L, "APP_ID");
+  const char *app_id = lua_tostring(L, -1);
+  lua_pop(L, 1);
+
+  const char *root_path;
+  static char root_buf[128];
+  if (app_id) {
+    snprintf(root_buf, sizeof(root_buf), "/data/%s", app_id);
+    sdcard_mkdir(root_buf);
+    root_path = root_buf;
+  } else {
+    root_path = "/data";
+  }
+
   if (lua_isnoneornil(L, 1)) {
-    lua_getglobal(L, "APP_DIR");
-    const char *app_dir = lua_tostring(L, -1);
-    lua_pop(L, 1);
-    if (app_dir) {
-      const char *dirname = strrchr(app_dir, '/');
-      if (dirname && dirname[1] != '\0') {
-        dirname++;
-        snprintf(default_path, sizeof(default_path), "/data/%s", dirname);
-        sdcard_mkdir(default_path);
-        start_path = default_path;
-      } else {
-        start_path = "/data";
-      }
-    } else {
-      start_path = "/data";
-    }
+    start_path = root_path;
   } else {
     start_path = luaL_checkstring(L, 1);
   }
 
   char selected[192];
-  if (file_browser_show(start_path, selected, sizeof(selected))) {
+  if (file_browser_show(start_path, root_path, selected, sizeof(selected))) {
     lua_pushstring(L, selected);
   } else {
     lua_pushnil(L);
